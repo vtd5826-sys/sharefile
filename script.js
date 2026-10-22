@@ -9,7 +9,6 @@ import {
 import { 
     getFirestore, 
     collection, 
-    addRef, 
     addDoc, 
     getDocs, 
     doc, 
@@ -20,7 +19,7 @@ import {
     orderBy, 
     serverTimestamp, 
     setDoc 
-} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore";
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 // Cấu hình Firebase công khai mẫu
 const firebaseConfig = {
@@ -244,7 +243,7 @@ window.filterFiles = function() {
     renderFiles(filtered);
 }
 
-// Xem chi tiết bài viết (Trang riêng biệt)
+// Xem chi tiết bài viết
 window.viewFileDetail = async function(fileId) {
     switchTab('detail');
     const detailContainer = document.getElementById('detailContent');
@@ -258,7 +257,6 @@ window.viewFileDetail = async function(fileId) {
             const data = docSnap.data();
             let isAdmin = (data.author === 'TDZADMIN');
 
-            // Tăng lượt xem
             await updateDoc(docRef, { views: (data.views || 0) + 1 });
 
             let galleryHtml = data.images && data.images.length > 0
