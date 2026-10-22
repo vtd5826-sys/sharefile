@@ -5,7 +5,7 @@ let selectedImagesBase64 = [];
 // Khởi tạo hệ thống chạy ngay lập tức
 (function initApp() {
     let users = JSON.parse(localStorage.getItem('sharehub_users') || '[]');
-    // Đảm bảo tài khoản admin TDZADMIN luôn tồn tại (không phân biệt hoa thường)
+    // Đảm bảo tài khoản admin TDZADMIN luôn tồn tại
     if (!users.some(u => u.username.toUpperCase() === 'TDZADMIN')) {
         users.push({ username: 'TDZADMIN', password: 'TDZ2013@' });
         localStorage.setItem('sharehub_users', JSON.stringify(users));
