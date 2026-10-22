@@ -1,12 +1,14 @@
 let currentUser = null;
 let allFiles = [];
 let selectedImagesBase64 = [];
+let currentBanUsername = null;
+let currentReportFileId = null;
 
 // Khởi tạo hệ thống chạy ngay lập tức
 (function initApp() {
     let users = JSON.parse(localStorage.getItem('sharehub_users') || '[]');
     if (!users.some(u => u.username.toUpperCase() === 'TDZADMIN')) {
-        users.push({ username: 'TDZADMIN', password: 'TDZ2013@' });
+        users.push({ username: 'TDZADMIN', password: 'TDZ2013@', bannedUntil: 0, banReason: '' });
         localStorage.setItem('sharehub_users', JSON.stringify(users));
     }
 
@@ -27,6 +29,10 @@ window.switchTab = function(tabName) {
     document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
     document.getElementById(`tab-${tabName}`).classList.add('active');
     window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    if (tabName === 'admin') {
+        loadAdminData();
+    }
 }
 
 // Xử lý Ảnh Preview (Tối đa 3 ảnh)
@@ -69,6 +75,12 @@ window.handleUpload = function(event) {
     if (!currentUser) {
         showToast('Vui lòng đăng nhập để đăng file!');
         openAuthModal();
+        return;
+    }
+
+    // Kiểm tra xem user có đang bị ban không
+    if (isUserBanned(currentUser)) {
+        showToast('Tài khoản của bạn đang bị cấm, không thể đăng bài!');
         return;
     }
 
@@ -145,6 +157,10 @@ function renderFiles(files) {
             ? `<button class="action-icon-btn" style="border-color: #ff3366; color: #ff3366;" onclick="deleteFile('${file.id}')" title="Xóa file"><i class="fa-solid fa-trash"></i></button>` 
             : '';
 
+        let reportBtnHtml = currentUser 
+            ? `<button class="action-icon-btn" onclick="openReportModal('${file.id}')" title="Báo cáo bài viết"><i class="fa-solid fa-triangle-exclamation"></i></button>`
+            : '';
+
         return `
             <div class="file-card">
                 <div>
@@ -162,6 +178,7 @@ function renderFiles(files) {
                     <div class="card-actions">
                         <button class="action-icon-btn" onclick="viewFileDetail('${file.id}')" title="Xem chi tiết"><i class="fa-solid fa-eye"></i></button>
                         <button class="action-icon-btn" onclick="copyShareLink('${file.id}')" title="Sao chép Link"><i class="fa-solid fa-share-nodes"></i></button>
+                        ${reportBtnHtml}
                         ${deleteBtnHtml}
                     </div>
                 </div>
@@ -300,6 +317,11 @@ window.sendChatMessage = function(event) {
         return;
     }
 
+    if (isUserBanned(currentUser)) {
+        showToast('Tài khoản của bạn đang bị cấm, không thể nhắn tin!');
+        return;
+    }
+
     const input = document.getElementById('chatInput');
     const text = input.value.trim();
     if (!text) return;
@@ -313,6 +335,199 @@ window.sendChatMessage = function(event) {
     localStorage.setItem('sharehub_chat', JSON.stringify(messages));
     input.value = '';
     loadChatMessages();
+}
+
+// BÁO CÁO BÀI VIẾT (REPORT)
+window.openReportModal = function(fileId) {
+    currentReportFileId = fileId;
+    document.getElementById('reportModal').style.display = 'flex';
+}
+window.closeReportModal = function() {
+    document.getElementById('reportModal').style.display = 'none';
+}
+window.submitReport = function(event) {
+    event.preventDefault();
+    const reason = document.getElementById('reportReason').value;
+
+    let reports = JSON.parse(localStorage.getItem('sharehub_reports') || '[]');
+    reports.push({
+        id: 'rep_' + Date.now(),
+        fileId: currentReportFileId,
+        reporter: currentUser,
+        reason: reason,
+        time: Date.now()
+    });
+    localStorage.setItem('sharehub_reports', JSON.stringify(reports));
+
+    showToast('Đã gửi báo cáo thành công cho Admin!');
+    closeReportModal();
+}
+
+// HỆ THỐNG BAN VÀ QUẢN LÝ TÀI KHOẢN (ADMIN ONLY)
+window.openBanModal = function(username) {
+    currentBanUsername = username;
+    document.getElementById('banTargetUser').innerText = username;
+    document.getElementById('banYears').value = 0;
+    document.getElementById('banMonths').value = 0;
+    document.getElementById('banWeeks').value = 0;
+    document.getElementById('banDays').value = 0;
+    document.getElementById('banHours').value = 0;
+    document.getElementById('banMinutes').value = 0;
+    document.getElementById('banReasonPreset').value = '';
+    document.getElementById('banReasonCustom').value = '';
+    document.getElementById('banModal').style.display = 'flex';
+}
+window.closeBanModal = function() {
+    document.getElementById('banModal').style.display = 'none';
+}
+window.selectBanPreset = function(select) {
+    if (select.value) {
+        document.getElementById('banReasonCustom').value = select.value;
+    }
+}
+
+window.confirmBan = function(event) {
+    event.preventDefault();
+    if (!currentUser || currentUser.toUpperCase() !== 'TDZADMIN') return;
+
+    const years = parseInt(document.getElementById('banYears').value) || 0;
+    const months = parseInt(document.getElementById('banMonths').value) || 0;
+    const weeks = parseInt(document.getElementById('banWeeks').value) || 0;
+    const days = parseInt(document.getElementById('banDays').value) || 0;
+    const hours = parseInt(document.getElementById('banHours').value) || 0;
+    const minutes = parseInt(document.getElementById('banMinutes').value) || 0;
+    const reason = document.getElementById('banReasonCustom').value.trim() || 'Vi phạm nội quy server';
+
+    if (years === 0 && months === 0 && weeks === 0 && days === 0 && hours === 0 && minutes === 0) {
+        showToast('Vui lòng chọn thời gian cấm lớn hơn 0!');
+        return;
+    }
+
+    let banDurationMs = 
+        years * 365 * 24 * 60 * 60 * 1000 +
+        months * 30 * 24 * 60 * 60 * 1000 +
+        weeks * 7 * 24 * 60 * 60 * 1000 +
+        days * 24 * 60 * 60 * 1000 +
+        hours * 60 * 60 * 1000 +
+        minutes * 60 * 1000;
+
+    let bannedUntil = Date.now() + banDurationMs;
+
+    let users = JSON.parse(localStorage.getItem('sharehub_users') || '[]');
+    users = users.map(u => {
+        if (u.username.toLowerCase() === currentBanUsername.toLowerCase()) {
+            u.bannedUntil = bannedUntil;
+            u.banReason = reason;
+        }
+        return u;
+    });
+    localStorage.setItem('sharehub_users', JSON.stringify(users));
+
+    showToast(`Đã cấm tài khoản ${currentBanUsername} thành công!`);
+    closeBanModal();
+    loadAdminData();
+}
+
+window.unbanUser = function(username) {
+    let users = JSON.parse(localStorage.getItem('sharehub_users') || '[]');
+    users = users.map(u => {
+        if (u.username.toLowerCase() === username.toLowerCase()) {
+            u.bannedUntil = 0;
+            u.banReason = '';
+        }
+        return u;
+    });
+    localStorage.setItem('sharehub_users', JSON.stringify(users));
+    showToast(`Đã mở khóa cho tài khoản ${username}!`);
+    loadAdminData();
+}
+
+window.deleteAccount = function(username) {
+    if (username.toUpperCase() === 'TDZADMIN') {
+        showToast('Không thể xóa tài khoản Admin tối cao!');
+        return;
+    }
+    if (!confirm(`Bạn có chắc muốn xóa vĩnh viễn tài khoản ${username}?`)) return;
+
+    let users = JSON.parse(localStorage.getItem('sharehub_users') || '[]');
+    users = users.filter(u => u.username.toLowerCase() !== username.toLowerCase());
+    localStorage.setItem('sharehub_users', JSON.stringify(users));
+    showToast(`Đã xóa tài khoản ${username}!`);
+    loadAdminData();
+}
+
+function isUserBanned(username) {
+    let users = JSON.parse(localStorage.getItem('sharehub_users') || '[]');
+    const user = users.find(u => u.username.toLowerCase() === username.toLowerCase());
+    if (user && user.bannedUntil && user.bannedUntil > Date.now()) {
+        return true;
+    }
+    return false;
+}
+
+function loadAdminData() {
+    if (!currentUser || currentUser.toUpperCase() !== 'TDZADMIN') return;
+
+    // Load Reports Inbox
+    const reportContainer = document.getElementById('adminReportList');
+    const reports = JSON.parse(localStorage.getItem('sharehub_reports') || '[]');
+    const files = JSON.parse(localStorage.getItem('sharehub_files') || '[]');
+
+    if (reports.length === 0) {
+        reportContainer.innerHTML = `<p style="color:var(--text-muted); font-size:0.9rem;">Hòm thư trống, không có báo cáo nào.</p>`;
+    } else {
+        reportContainer.innerHTML = reports.map(rep => {
+            const file = files.find(f => f.id === rep.fileId);
+            const fileTitle = file ? file.title : 'Bài viết đã bị xóa';
+            return `
+                <div class="report-item">
+                    <div>
+                        <strong style="color:var(--admin-red);">[${rep.reason}]</strong> 
+                        <span>Người báo cáo: <strong>${rep.reporter}</strong></span>
+                        <div style="font-size: 0.85rem; color:var(--text-muted); margin-top:4px;">Bài viết: <em>${fileTitle}</em> (${new Date(rep.time).toLocaleString()})</div>
+                    </div>
+                    <div style="display:flex; gap:8px;">
+                        ${file ? `<button class="action-icon-btn" onclick="viewFileDetail('${rep.fileId}')" title="Xem bài"><i class="fa-solid fa-eye"></i></button>` : ''}
+                        <button class="action-icon-btn" style="border-color:#ff3366; color:#ff3366;" onclick="deleteReport('${rep.id}')" title="Xóa báo cáo"><i class="fa-solid fa-check"></i></button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    // Load Accounts Table
+    const tableBody = document.getElementById('accountsTableBody');
+    const users = JSON.parse(localStorage.getItem('sharehub_users') || '[]');
+    
+    tableBody.innerHTML = users.map(u => {
+        let isBanned = u.bannedUntil && u.bannedUntil > Date.now();
+        let banStatusText = isBanned 
+            ? `<span style="color:var(--admin-red); font-weight:700;">Đang cấm (Đến ${new Date(u.bannedUntil).toLocaleString()})</span><br><small>Lý do: ${u.banReason}</small>` 
+            : `<span style="color:#10b981; font-weight:600;">Hoạt động bình thường</span>`;
+
+        let actionBtns = u.username.toUpperCase() === 'TDZADMIN' 
+            ? `<span style="color:var(--text-muted);">Admin Tối Cao</span>`
+            : (isBanned 
+                ? `<button class="admin-btn" style="padding:6px 12px; font-size:0.85rem;" onclick="unbanUser('${u.username}')">Mở khóa</button>` 
+                : `<button class="admin-btn danger" style="padding:6px 12px; font-size:0.85rem;" onclick="openBanModal('${u.username}')">Cấm</button>`) +
+              `<button class="admin-btn danger" style="padding:6px 12px; font-size:0.85rem; background:#334155; margin-left:6px;" onclick="deleteAccount('${u.username}')">Xóa</button>`;
+
+        return `
+            <tr>
+                <td><strong>${u.username}</strong></td>
+                <td>${banStatusText}</td>
+                <td>${actionBtns}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+window.deleteReport = function(repId) {
+    let reports = JSON.parse(localStorage.getItem('sharehub_reports') || '[]');
+    reports = reports.filter(r => r.id !== repId);
+    localStorage.setItem('sharehub_reports', JSON.stringify(reports));
+    loadAdminData();
+    showToast('Đã xóa báo cáo khỏi hòm thư.');
 }
 
 // Xác thực & Tài khoản
@@ -336,7 +551,7 @@ window.handleRegister = function(event) {
         return;
     }
 
-    users.push({ username, password });
+    users.push({ username, password, bannedUntil: 0, banReason: '' });
     localStorage.setItem('sharehub_users', JSON.stringify(users));
     showToast('Đăng ký thành công! Hãy đăng nhập.');
     switchAuthMode('login');
@@ -351,6 +566,11 @@ window.handleLogin = function(event) {
     const user = users.find(u => u.username.toLowerCase() === usernameInput.toLowerCase() && u.password === password);
 
     if (user) {
+        if (user.bannedUntil && user.bannedUntil > Date.now()) {
+            showToast(`Tài khoản bị cấm đến ${new Date(user.bannedUntil).toLocaleString()}. Lý do: ${user.banReason}`);
+            return;
+        }
+
         currentUser = user.username;
         localStorage.setItem('sharehub_session', currentUser);
         updateAuthUI();
@@ -372,6 +592,10 @@ window.handleLogout = function() {
 function checkStoredSession() {
     const session = localStorage.getItem('sharehub_session');
     if (session) {
+        if (isUserBanned(session)) {
+            localStorage.removeItem('sharehub_session');
+            return;
+        }
         currentUser = session;
         updateAuthUI();
     }
@@ -379,18 +603,23 @@ function checkStoredSession() {
 
 function updateAuthUI() {
     const authNavArea = document.getElementById('authNavArea');
+    const adminInboxNavArea = document.getElementById('adminInboxNavArea');
     const authorInput = document.getElementById('authorName');
 
     if (currentUser) {
         let isAdmin = (currentUser.toUpperCase() === 'TDZADMIN');
-        if (isAdmin && !document.getElementById('adminTabBtn')) {
-            const navActions = document.querySelector('.nav-actions');
-            const adminBtn = document.createElement('button');
-            adminBtn.id = 'adminTabBtn';
-            adminBtn.className = 'nav-btn';
-            adminBtn.innerHTML = `<i class="fa-solid fa-shield-halved"></i> Admin`;
-            adminBtn.onclick = () => switchTab('admin');
-            navActions.insertBefore(adminBtn, navActions.children[2]);
+        
+        if (isAdmin) {
+            if (!document.getElementById('adminTabBtn')) {
+                const navActions = document.querySelector('.nav-actions');
+                const adminBtn = document.createElement('button');
+                adminBtn.id = 'adminTabBtn';
+                adminBtn.className = 'nav-btn';
+                adminBtn.innerHTML = `<i class="fa-solid fa-shield-halved"></i> Admin`;
+                adminBtn.onclick = () => switchTab('admin');
+                navActions.insertBefore(adminBtn, navActions.children[2]);
+            }
+            adminInboxNavArea.innerHTML = `<button class="nav-btn inbox" onclick="switchTab('admin')"><i class="fa-solid fa-inbox"></i> Hòm thư</button>`;
         }
 
         authNavArea.innerHTML = `
@@ -402,6 +631,7 @@ function updateAuthUI() {
         if (authorInput) authorInput.value = currentUser;
     } else {
         authNavArea.innerHTML = `<button class="nav-btn login" onclick="openAuthModal()"><i class="fa-solid fa-user-lock"></i> Đăng nhập</button>`;
+        adminInboxNavArea.innerHTML = '';
         const adminTab = document.getElementById('adminTabBtn');
         if (adminTab) adminTab.remove();
     }
