@@ -173,7 +173,7 @@ window.viewFileDetail = function(fileId) {
             ${galleryHtml}
             <div class="detail-download-box">
                 <p style="margin-bottom: 15px; color:var(--text-muted);"><i class="fa-solid fa-file-zipper"></i> Tệp: <strong>${file.fileName}</strong> (${file.fileSize})</p>
-                <a href="#" class="download-btn" onclick="triggerDownload('${file.id}')"><i class="fa-solid fa-download"></i> Tải file về máy</a>
+                <a href="#" class="download-btn" onclick="triggerDownload(event, '${file.id}')"><i class="fa-solid fa-download"></i> Tải file về máy</a>
             </div>
             <div class="detail-footer-info">
                 <span>Tác giả: <strong>${file.author}</strong> ${isAdmin ? '<span class="admin-badge">[ADMIN]</span>' : ''}</span>
@@ -185,15 +185,33 @@ window.viewFileDetail = function(fileId) {
     }
 }
 
-window.triggerDownload = function(fileId) {
+// Kích hoạt tải tệp xuống thực tế
+window.triggerDownload = function(event, fileId) {
+    event.preventDefault();
     let files = JSON.parse(localStorage.getItem('sharehub_files') || '[]');
     const file = files.find(f => f.id === fileId);
+    
     if (file) {
         file.downloads = (file.downloads || 0) + 1;
         localStorage.setItem('sharehub_files', JSON.stringify(files));
+        
         const dlEl = document.getElementById('dlCount');
         if (dlEl) dlEl.innerText = file.downloads;
-        showToast(`Bắt đầu tải xuống: ${file.fileName}`);
+
+        // Tạo tệp tải về máy thực tế
+        const fileContent = `=== SHAREHUB DOWNLOAD ===\nTiêu đề: ${file.title}\nTác giả: ${file.author}\nMô tả: ${file.subContent}\nTên tệp gốc: ${file.fileName}\nKích thước: ${file.fileSize}`;
+        const blob = new Blob([fileContent], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = file.fileName || 'downloaded_file.txt';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        showToast(`Đang tải xuống: ${file.fileName}`);
     }
 }
 
