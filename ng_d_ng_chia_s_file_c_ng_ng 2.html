@@ -1,0 +1,1272 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Share File Cộng Đồng</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        @keyframes pulse-slow {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.85; }
+        }
+        .animate-pulse-slow {
+            animation: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col antialiased">
+
+    <!-- GLOBAL SERVER ANNOUNCEMENT BANNER -->
+    <div id="global-announcement-banner" class="hidden bg-gradient-to-r from-amber-500 via-rose-500 to-red-600 text-white px-4 py-2.5 shadow-md relative z-50">
+        <div class="max-w-6xl mx-auto flex items-center justify-between text-xs sm:text-sm font-semibold">
+            <div class="flex items-center space-x-2.5 truncate pr-4">
+                <span class="bg-white/20 backdrop-blur-md px-2 py-0.5 rounded-full text-[10px] uppercase font-black tracking-wider flex items-center gap-1">
+                    <i class="fa-solid fa-bullhorn text-amber-200"></i> Thông Báo Server
+                </span>
+                <span id="announcement-text" class="truncate">Đang tải thông báo...</span>
+            </div>
+            <button id="close-announcement-btn" class="text-white/80 hover:text-white p-1 rounded transition">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- HEADER / NAVIGATION -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
+        <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+            <!-- Logo & Brand -->
+            <div class="flex items-center space-x-3 cursor-pointer" id="logo-btn">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white shadow-md shadow-indigo-200">
+                    <i class="fa-solid fa-cloud-arrow-up text-lg"></i>
+                </div>
+                <span class="font-bold text-xl tracking-tight text-slate-900 hidden sm:inline">ShareHub</span>
+            </div>
+
+            <!-- Nav Tabs (Home vs Chatroom) -->
+            <div class="flex items-center bg-slate-100 p-1 rounded-xl">
+                <button id="tab-nav-files" class="px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition text-indigo-600 bg-white shadow-sm flex items-center gap-1.5">
+                    <i class="fa-solid fa-folder-open"></i>
+                    <span>Kho File</span>
+                </button>
+                <button id="tab-nav-chat" class="px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition text-slate-600 hover:text-indigo-600 flex items-center gap-1.5">
+                    <i class="fa-solid fa-comments"></i>
+                    <span>Phòng Chat</span>
+                </button>
+            </div>
+
+            <!-- Navigation Actions / Auth State -->
+            <div id="auth-section" class="flex items-center space-x-3">
+                <!-- Loading State -->
+                <div id="auth-loading" class="text-slate-400 text-sm">
+                    <i class="fa-solid fa-circle-notch fa-spin mr-1"></i> Đang tải...
+                </div>
+
+                <!-- Logged Out Buttons -->
+                <div id="auth-logged-out" class="hidden flex items-center space-x-2">
+                    <button id="nav-login-btn" class="px-3.5 py-2 text-xs sm:text-sm font-medium text-slate-700 hover:text-indigo-600 rounded-lg hover:bg-slate-100 transition">
+                        Đăng nhập
+                    </button>
+                    <button id="nav-register-btn" class="px-3.5 py-2 text-xs sm:text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm transition">
+                        Đăng ký
+                    </button>
+                </div>
+
+                <!-- Logged In User Info -->
+                <div id="auth-logged-in" class="hidden flex items-center space-x-2 sm:space-x-3">
+                    <!-- Admin Panel Toggle Button (Only visible for ADMIN) -->
+                    <button id="admin-panel-btn" class="hidden px-2.5 py-1.5 text-xs font-bold text-amber-700 bg-amber-100 border border-amber-300 rounded-lg hover:bg-amber-200 transition flex items-center gap-1">
+                        <i class="fa-solid fa-crown text-amber-600"></i>
+                        <span class="hidden md:inline">Admin Panel</span>
+                    </button>
+
+                    <button id="nav-create-post-btn" class="px-3 py-1.5 text-xs sm:text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition flex items-center gap-1.5 shadow-sm">
+                        <i class="fa-solid fa-plus"></i>
+                        <span class="hidden sm:inline">Đăng file</span>
+                    </button>
+                    <div class="h-6 w-px bg-slate-200"></div>
+                    <div class="flex items-center space-x-2">
+                        <div class="relative">
+                            <div class="w-9 h-9 rounded-full bg-slate-200 border border-slate-300 flex items-center justify-center font-bold text-slate-600 text-sm" id="user-avatar">
+                                U
+                            </div>
+                            <span id="admin-badge-avatar" class="hidden absolute -bottom-1 -right-1 bg-red-600 text-white text-[9px] font-black px-1 rounded-full border border-white">
+                                ADM
+                            </span>
+                        </div>
+                        <div class="flex flex-col">
+                            <div class="flex items-center space-x-1">
+                                <span id="user-display-name" class="text-xs sm:text-sm font-semibold text-slate-700 max-w-[80px] sm:max-w-[120px] truncate">
+                                    User
+                                </span>
+                                <span id="admin-tag" class="hidden text-[10px] font-extrabold bg-gradient-to-r from-red-600 to-amber-500 text-white px-1.5 py-0.2 rounded shadow-sm">
+                                    ADMIN
+                                </span>
+                            </div>
+                        </div>
+                        <button id="logout-btn" title="Đăng xuất" class="p-2 text-slate-400 hover:text-red-500 rounded-lg hover:bg-slate-100 transition">
+                            <i class="fa-solid fa-right-from-bracket"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- ADMIN BROADCAST MODAL / PANEL -->
+    <div id="admin-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl relative border-2 border-amber-400">
+            <button id="close-admin-modal-btn" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-2">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+
+            <div class="flex items-center space-x-3 mb-4">
+                <div class="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold text-xl shadow-md shadow-amber-200">
+                    <i class="fa-solid fa-crown"></i>
+                </div>
+                <div>
+                    <h3 class="text-lg font-bold text-slate-900">Bảng Điều Khiển Admin</h3>
+                    <p class="text-xs text-slate-500">Phát thông báo cho toàn bộ người dùng server</p>
+                </div>
+            </div>
+
+            <form id="admin-announcement-form" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                        Nội dung thông báo toàn Server
+                    </label>
+                    <textarea id="admin-announcement-input" rows="3" required placeholder="Nhập nội dung thông báo quan trọng..." class="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-amber-500 outline-none text-slate-800 text-sm custom-scrollbar"></textarea>
+                </div>
+
+                <div class="flex items-center space-x-3 pt-2">
+                    <button type="submit" id="btn-save-announcement" class="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-rose-500 text-white font-bold rounded-xl shadow-md hover:from-amber-600 hover:to-rose-600 transition text-sm">
+                        <i class="fa-solid fa-paper-plane mr-1"></i> Phát Thông Báo
+                    </button>
+                    <button type="button" id="btn-delete-announcement" class="px-4 py-2.5 bg-red-100 text-red-600 font-bold rounded-xl hover:bg-red-200 transition text-sm">
+                        <i class="fa-solid fa-trash mr-1"></i> Xóa Băng Rôn
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MAIN CONTENT AREA -->
+    <main class="flex-grow max-w-5xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+
+        <!-- BANNER HEADER -->
+        <div class="text-center my-4 sm:my-6">
+            <h1 class="text-2xl sm:text-4xl font-extrabold text-slate-900 tracking-tight mb-2">
+                share file của riêng bạn cho cộng đồng
+            </h1>
+            <p class="text-slate-500 text-xs sm:text-sm max-w-xl mx-auto">
+                Tải lên file, chia sẻ hình ảnh xem trước, tạo liên kết tải về trực tiếp & trò chuyện cùng cộng đồng.
+            </p>
+        </div>
+
+        <!-- VIEW 1: HOME LIST / RECENT SHARES -->
+        <section id="view-home" class="space-y-6">
+            <div class="flex items-center justify-between border-b border-slate-200 pb-4">
+                <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                    <i class="fa-solid fa-folder-open text-indigo-500"></i>
+                    Các file vừa chia sẻ
+                </h2>
+                <button id="go-to-create-btn" class="text-xs sm:text-sm text-indigo-600 font-semibold hover:underline flex items-center gap-1">
+                    <span>Tạo bài mới</span>
+                    <i class="fa-solid fa-arrow-right"></i>
+                </button>
+            </div>
+
+            <!-- List of shared posts -->
+            <div id="posts-container" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Posts will be populated dynamically -->
+            </div>
+
+            <!-- Empty State -->
+            <div id="empty-posts" class="hidden text-center py-16 bg-white rounded-2xl border border-dashed border-slate-300 p-6">
+                <i class="fa-solid fa-cloud-arrow-up text-5xl text-slate-300 mb-3"></i>
+                <p class="text-slate-500 font-medium mb-4">Chưa có file nào được chia sẻ.</p>
+                <button onclick="app.showCreateForm()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium text-sm hover:bg-indigo-700 transition">
+                    Hãy là người chia sẻ đầu tiên
+                </button>
+            </div>
+        </section>
+
+        <!-- VIEW 2: FORM TẠO BÀI (ADD FILE & CONTENT) -->
+        <section id="view-create" class="hidden max-w-2xl mx-auto bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden p-6 sm:p-8">
+            <div class="flex items-center justify-between mb-6 border-b pb-4">
+                <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+                    <i class="fa-solid fa-cloud-arrow-up text-indigo-600"></i>
+                    Đăng file chia sẻ mới
+                </h2>
+                <button id="cancel-create-btn" class="text-slate-400 hover:text-slate-600">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+
+            <form id="share-form" class="space-y-5">
+                <!-- 1. Ô TẢI LÊN FILE (Max 1GB UI sim) -->
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-1">
+                        File chia sẻ <span class="text-xs font-normal text-slate-400">(Tối đa 1GB)</span> <span class="text-red-500">*</span>
+                    </label>
+                    <div id="file-dropzone" class="border-2 border-dashed border-slate-300 rounded-xl p-5 text-center hover:border-indigo-500 transition cursor-pointer bg-slate-50 relative">
+                        <input type="file" id="input-file" class="hidden" required>
+                        <div id="file-placeholder" class="space-y-2">
+                            <i class="fa-solid fa-file-arrow-up text-3xl text-indigo-500"></i>
+                            <p class="text-sm text-slate-600 font-medium">Nhấn để chọn file hoặc kéo thả vào đây</p>
+                            <p class="text-xs text-slate-400">Hỗ trợ các loại tệp: ZIP, RAR, PDF, MP4, APK, EXE... (Max 1GB)</p>
+                        </div>
+                        <div id="file-selected" class="hidden flex items-center justify-between bg-white p-3 rounded-lg border border-slate-200 text-left">
+                            <div class="flex items-center space-x-3 overflow-hidden">
+                                <div class="w-10 h-10 rounded bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                                    <i class="fa-solid fa-file-lines text-lg"></i>
+                                </div>
+                                <div class="truncate">
+                                    <p id="file-name" class="text-sm font-semibold text-slate-800 truncate">file-name.zip</p>
+                                    <p id="file-size" class="text-xs text-slate-400">0 MB</p>
+                                </div>
+                            </div>
+                            <button type="button" id="remove-file-btn" class="text-red-500 hover:bg-red-50 p-2 rounded-lg transition">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. Ô TẢI LÊN ẢNH XEM TRƯỚC (MAX 3 TẤM) -->
+                <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <label class="block text-sm font-semibold text-slate-700">
+                            Ảnh xem trước (Preview) <span class="text-xs font-normal text-slate-400">(Tối đa 3 ảnh)</span>
+                        </label>
+                        <span id="image-count" class="text-xs font-semibold text-indigo-600">0/3</span>
+                    </div>
+                    
+                    <div class="grid grid-cols-3 gap-3 mb-2" id="preview-grid">
+                        <!-- Render selected previews here -->
+                    </div>
+
+                    <div id="image-upload-box" class="border border-dashed border-slate-300 rounded-xl p-4 text-center hover:border-indigo-500 transition cursor-pointer bg-slate-50">
+                        <input type="file" id="input-images" accept="image/*" multiple class="hidden">
+                        <div class="flex items-center justify-center space-x-2 text-indigo-600 font-medium text-sm">
+                            <i class="fa-solid fa-image"></i>
+                            <span>Thêm ảnh xem trước</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. Ô NHẬP NỘI DUNG CHÍNH (Tiêu đề/Bài viết chính) -->
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-1">
+                        Nội dung chính / Tiêu đề lớn <span class="text-red-500">*</span>
+                    </label>
+                    <input type="text" id="input-title" required placeholder="Nhập tiêu đề hoặc nội dung chính nổi bật..." class="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition text-slate-800 font-medium">
+                </div>
+
+                <!-- 4. Ô NHẬP NỘI DUNG PHỤ (Mô tả chi tiết) -->
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-1">
+                        Nội dung phụ / Mô tả chi tiết
+                    </label>
+                    <textarea id="input-description" rows="3" placeholder="Nhập ghi chú, hướng dẫn cài đặt, mật khẩu giải nén..." class="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition text-slate-800 text-sm custom-scrollbar"></textarea>
+                </div>
+
+                <!-- 5. Ô NHẬP TÁC GIẢ -->
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-1">
+                        Tác giả <span class="text-red-500">*</span>
+                    </label>
+                    <input type="text" id="input-author" required placeholder="Tên tác giả hoặc nickname của bạn" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition text-slate-800 text-sm">
+                </div>
+
+                <!-- NÚT ĐĂNG / TẠO BÀI -->
+                <div class="pt-2">
+                    <button type="submit" id="submit-post-btn" class="w-full py-3 bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-semibold rounded-xl shadow-lg shadow-indigo-200 hover:from-indigo-700 hover:to-violet-700 transition flex items-center justify-center space-x-2">
+                        <i class="fa-solid fa-paper-plane"></i>
+                        <span>Đăng & Tạo trang web file</span>
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <!-- VIEW 3: TRANG CHI TIẾT BÀI / PREVIEW FILE (DETAIL PAGE) -->
+        <section id="view-detail" class="hidden max-w-3xl mx-auto bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden p-6 sm:p-10 space-y-8">
+            
+            <!-- Header Navigation in Detail -->
+            <div class="flex items-center justify-between border-b pb-4">
+                <button id="back-to-home-btn" class="text-slate-500 hover:text-slate-800 text-sm font-medium flex items-center gap-2">
+                    <i class="fa-solid fa-arrow-left"></i>
+                    <span>Trở về danh sách</span>
+                </button>
+                <span class="text-xs text-slate-400 bg-slate-100 px-3 py-1 rounded-full font-mono" id="detail-created-at">Mới đăng</span>
+            </div>
+
+            <!-- 2A. NỘI DUNG CHÍNH (Hiển thị nổi bật ở đầu, chữ to) -->
+            <div class="space-y-3">
+                <h1 id="detail-title" class="text-2xl sm:text-4xl font-black text-slate-900 leading-tight tracking-tight">
+                    Tiêu đề file hiển thị ở đây
+                </h1>
+                
+                <!-- 2A. NỘI DUNG PHỤ (Mô tả nhỏ ở dưới) -->
+                <div id="detail-description" class="text-slate-600 text-sm sm:text-base leading-relaxed bg-slate-50 p-4 rounded-xl border border-slate-100 whitespace-pre-line">
+                    Mô tả chi tiết nội dung phụ sẽ xuất hiện tại đây.
+                </div>
+            </div>
+
+            <!-- 2B. ẢNH XEM TRƯỚC (MAX 3 TẤM - Gallery/Grid) -->
+            <div id="detail-gallery-container" class="space-y-2">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                    <i class="fa-solid fa-images"></i>
+                    Ảnh xem trước
+                </h3>
+                <div id="detail-gallery" class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <!-- Images rendered dynamically -->
+                </div>
+            </div>
+
+            <!-- 2B. NÚT TẢI FILE -->
+            <div class="bg-gradient-to-r from-indigo-50 to-violet-50 p-6 rounded-2xl border border-indigo-100 text-center space-y-3">
+                <div class="flex items-center justify-center space-x-3 text-slate-700">
+                    <i class="fa-solid fa-file-zipper text-2xl text-indigo-600"></i>
+                    <div class="text-left">
+                        <div id="detail-file-name" class="font-bold text-slate-900 text-sm sm:text-base truncate max-w-xs sm:max-w-md">tập_tin.zip</div>
+                        <div id="detail-file-size" class="text-xs text-slate-500">Dung lượng: 0 MB</div>
+                    </div>
+                </div>
+
+                <a id="detail-download-btn" download target="_blank" class="inline-flex items-center justify-center space-x-2 px-8 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 transition transform hover:-translate-y-0.5 cursor-pointer w-full sm:w-auto">
+                    <i class="fa-solid fa-download text-lg"></i>
+                    <span>Tải Về Ngay</span>
+                </a>
+            </div>
+
+            <!-- 2B. DÒNG THÔNG TIN TÁC GIẢ Ở CUỐI TRANG -->
+            <div class="pt-6 border-t border-slate-100 flex items-center justify-between text-xs sm:text-sm text-slate-500">
+                <div class="flex items-center space-x-2">
+                    <div class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 font-bold flex items-center justify-center" id="detail-author-avatar">
+                        A
+                    </div>
+                    <div>
+                        <span>Tác giả bài đăng: </span>
+                        <strong id="detail-author" class="text-slate-800 font-semibold">Tên tác giả</strong>
+                    </div>
+                </div>
+                <button id="share-link-btn" class="text-indigo-600 hover:underline flex items-center gap-1 font-medium">
+                    <i class="fa-solid fa-share-nodes"></i>
+                    <span>Chia sẻ link</span>
+                </button>
+            </div>
+        </section>
+
+        <!-- VIEW 4: BẢNG TRÒ CHUYỆN CỘNG ĐỒNG (CHATROOM) -->
+        <section id="view-chat" class="hidden max-w-3xl mx-auto bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden flex flex-col h-[650px]">
+            <!-- Chat Header -->
+            <div class="bg-slate-900 text-white p-4 flex items-center justify-between shadow-md">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 rounded-full bg-gradient-to-r from-indigo-500 to-violet-500 flex items-center justify-center text-white text-lg font-bold">
+                        <i class="fa-solid fa-comments"></i>
+                    </div>
+                    <div>
+                        <h2 class="font-bold text-base flex items-center gap-2">
+                            <span>Phòng Trò Chuyện Cộng Đồng</span>
+                            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                        </h2>
+                        <p class="text-xs text-slate-400">Nhắn tin trực tiếp cùng mọi thành viên trên server</p>
+                    </div>
+                </div>
+                <div class="text-xs text-slate-400 font-mono" id="chat-user-status">
+                    Chưa đăng nhập
+                </div>
+            </div>
+
+            <!-- Chat Messages Container -->
+            <div id="chat-messages-container" class="flex-grow p-4 overflow-y-auto space-y-3 bg-slate-50 custom-scrollbar">
+                <!-- Messages populate here dynamically -->
+            </div>
+
+            <!-- Chat Input Area -->
+            <div class="p-3 bg-white border-t border-slate-200">
+                <form id="chat-form" class="flex items-center space-x-2">
+                    <input type="text" id="chat-input" placeholder="Nhập tin nhắn trò chuyện..." class="flex-grow px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none text-slate-800 text-sm">
+                    <button type="submit" id="chat-send-btn" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md transition flex items-center justify-center shrink-0">
+                        <i class="fa-solid fa-paper-plane"></i>
+                    </button>
+                </form>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- AUTH MODAL (LOGIN / REGISTER) -->
+    <div id="auth-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 sm:p-8 shadow-2xl relative">
+            <button id="close-modal-btn" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-2">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+
+            <!-- Tabs -->
+            <div class="flex border-b border-slate-200 mb-6">
+                <button id="tab-login" class="flex-1 pb-3 text-center font-bold text-indigo-600 border-b-2 border-indigo-600">
+                    Đăng nhập
+                </button>
+                <button id="tab-register" class="flex-1 pb-3 text-center font-medium text-slate-400 hover:text-slate-600">
+                    Đăng ký
+                </button>
+            </div>
+
+            <!-- Login Form -->
+            <form id="login-form" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">
+                        Tên đăng nhập hoặc Email
+                    </label>
+                    <input type="text" id="login-email" required placeholder="TDZADMIN hoặc email@example.com" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none text-slate-800 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Mật khẩu</label>
+                    <input type="password" id="login-password" required placeholder="••••••••" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none text-slate-800 text-sm">
+                </div>
+                <button type="submit" class="w-full py-3 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 transition shadow-md shadow-indigo-200">
+                    Đăng Nhập
+                </button>
+            </form>
+
+            <!-- Register Form -->
+            <form id="register-form" class="space-y-4 hidden">
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Tên hiển thị / Tác giả</label>
+                    <input type="text" id="reg-name" required placeholder="Tên của bạn" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none text-slate-800 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Email</label>
+                    <input type="email" id="reg-email" required placeholder="nhapemail@example.com" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none text-slate-800 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Mật khẩu</label>
+                    <input type="password" id="reg-password" required minlength="6" placeholder="Tối thiểu 6 ký tự" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none text-slate-800 text-sm">
+                </div>
+                <button type="submit" class="w-full py-3 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 transition shadow-md shadow-indigo-200">
+                    Đăng Ký Tài Khoản
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- NOTIFICATION TOAST -->
+    <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center space-x-3 pointer-events-none">
+        <i id="toast-icon" class="fa-solid fa-circle-info text-indigo-400"></i>
+        <span id="toast-message" class="text-sm font-medium">Thông báo</span>
+    </div>
+
+    <!-- FOOTER -->
+    <footer class="bg-white border-t border-slate-200 py-6 text-center text-xs text-slate-400 mt-auto">
+        <p>© 2026 ShareHub - Nền tảng chia sẻ file cộng đồng an toàn và tiện lợi.</p>
+    </footer>
+
+    <!-- FIREBASE MODULE & APPLICATION LOGIC -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { 
+            getAuth, 
+            signInWithCustomToken, 
+            signInAnonymously, 
+            createUserWithEmailAndPassword, 
+            signInWithEmailAndPassword, 
+            signOut, 
+            onAuthStateChanged,
+            updateProfile 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, 
+            collection, 
+            doc, 
+            addDoc, 
+            setDoc,
+            deleteDoc,
+            onSnapshot 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global environment variables
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'share-file-app';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' 
+            ? JSON.parse(__firebase_config) 
+            : { apiKey: "demo", authDomain: "demo.firebaseapp.com", projectId: "demo" };
+
+        // Admin Account Credentials Constant
+        const ADMIN_USERNAME = "TDZADMIN";
+        const ADMIN_EMAIL_ALIAS = "tdzadmin@sharehub.com";
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // App state
+        let currentUser = null;
+        let isAdmin = false;
+        let selectedFile = null;
+        let previewImages = []; // Array of base64 strings (max 3)
+        let postsData = [];
+        let chatMessagesData = [];
+
+        // App Functions Container
+        window.app = {};
+
+        // --- AUTHENTICATION INIT ---
+        async function initAuth() {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (err) {
+                console.error("Auth initialization fallback:", err);
+                try { await signInAnonymously(auth); } catch(e){}
+            }
+        }
+
+        // --- REALTIME FIRESTORE LISTENERS ---
+        function subscribeData() {
+            // 1. Subscribe Posts (Rule 1 Compliance)
+            const postsRef = collection(db, 'artifacts', appId, 'public', 'data', 'posts');
+            onSnapshot(postsRef, (snapshot) => {
+                postsData = [];
+                snapshot.forEach(docSnap => {
+                    postsData.push({
+                        id: docSnap.id,
+                        ...docSnap.data()
+                    });
+                });
+                postsData.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+                renderPostsList();
+                checkUrlHash();
+            }, (err) => console.error("Posts error:", err));
+
+            // 2. Subscribe Chat Messages (Rule 1 Compliance)
+            const chatRef = collection(db, 'artifacts', appId, 'public', 'data', 'chats');
+            onSnapshot(chatRef, (snapshot) => {
+                chatMessagesData = [];
+                snapshot.forEach(docSnap => {
+                    chatMessagesData.push({
+                        id: docSnap.id,
+                        ...docSnap.data()
+                    });
+                });
+                chatMessagesData.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+                renderChatMessages();
+            }, (err) => console.error("Chat error:", err));
+
+            // 3. Subscribe Global Announcement Banner
+            const announcementRef = collection(db, 'artifacts', appId, 'public', 'data', 'announcements');
+            onSnapshot(announcementRef, (snapshot) => {
+                const banner = document.getElementById('global-announcement-banner');
+                const textElem = document.getElementById('announcement-text');
+                
+                let activeAnnouncement = null;
+                snapshot.forEach(docSnap => {
+                    activeAnnouncement = docSnap.data();
+                });
+
+                if (activeAnnouncement && activeAnnouncement.text) {
+                    textElem.innerText = activeAnnouncement.text;
+                    banner.classList.remove('hidden');
+                } else {
+                    banner.classList.add('hidden');
+                }
+            }, (err) => console.error("Announcement error:", err));
+        }
+
+        // --- UI RENDER FUNCTIONS ---
+        function renderPostsList() {
+            const container = document.getElementById('posts-container');
+            const emptyState = document.getElementById('empty-posts');
+
+            if (postsData.length === 0) {
+                container.innerHTML = '';
+                emptyState.classList.remove('hidden');
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            container.innerHTML = postsData.map(post => `
+                <div onclick="app.openDetail('${post.id}')" class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition cursor-pointer flex flex-col justify-between group">
+                    <div>
+                        <div class="flex items-start justify-between gap-3 mb-2">
+                            <h3 class="font-bold text-slate-800 group-hover:text-indigo-600 transition line-clamp-1">
+                                ${escapeHtml(post.title)}
+                            </h3>
+                            <span class="text-[10px] font-semibold bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-full whitespace-nowrap">
+                                ${escapeHtml(post.fileSize || 'N/A')}
+                            </span>
+                        </div>
+                        <p class="text-xs text-slate-500 line-clamp-2 mb-4">
+                            ${escapeHtml(post.description || 'Không có mô tả phụ.')}
+                        </p>
+                    </div>
+
+                    ${post.previewImages && post.previewImages.length > 0 ? `
+                        <div class="grid grid-cols-3 gap-1.5 mb-4 rounded-lg overflow-hidden max-h-24">
+                            ${post.previewImages.map(img => `
+                                <img src="${img}" class="w-full h-16 object-cover rounded">
+                            `).join('')}
+                        </div>
+                    ` : ''}
+
+                    <div class="flex items-center justify-between text-xs text-slate-400 pt-3 border-t border-slate-100">
+                        <span class="truncate max-w-[180px] flex items-center gap-1">
+                            <i class="fa-regular fa-user"></i> 
+                            ${post.isAdmin ? `<span class="bg-red-600 text-white font-extrabold text-[9px] px-1 rounded">ADMIN</span>` : ''}
+                            ${escapeHtml(post.author)}
+                        </span>
+                        <span><i class="fa-solid fa-download mr-1"></i> Chi tiết</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderChatMessages() {
+            const container = document.getElementById('chat-messages-container');
+            
+            if (chatMessagesData.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-10 text-slate-400 text-xs">
+                        <i class="fa-solid fa-comments text-3xl mb-2 text-slate-300"></i>
+                        <p>Chưa có tin nhắn nào. Hãy gửi lời chào đến cộng đồng!</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = chatMessagesData.map(msg => {
+                const isMe = currentUser && msg.userId === currentUser.uid;
+                const isAdminMsg = msg.isAdmin;
+
+                return `
+                    <div class="flex flex-col ${isMe ? 'items-end' : 'items-start'} mb-3">
+                        <div class="flex items-center space-x-1.5 mb-1 text-[11px] text-slate-500">
+                            ${isAdminMsg ? `<span class="bg-gradient-to-r from-red-600 to-amber-500 text-white font-black text-[9px] px-1.5 py-0.2 rounded shadow-xs">ADMIN</span>` : ''}
+                            <span class="font-semibold text-slate-700">${escapeHtml(msg.author)}</span>
+                            <span>•</span>
+                            <span>${msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}</span>
+                        </div>
+                        <div class="max-w-[85%] sm:max-w-[70%] rounded-2xl px-4 py-2.5 text-sm ${
+                            isAdminMsg 
+                            ? 'bg-gradient-to-r from-red-600 to-amber-600 text-white font-medium shadow-md shadow-red-200 rounded-tl-none' 
+                            : isMe 
+                                ? 'bg-indigo-600 text-white rounded-tr-none shadow-sm' 
+                                : 'bg-white text-slate-800 border border-slate-200 rounded-tl-none shadow-xs'
+                        }">
+                            ${escapeHtml(msg.text)}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            // Scroll to bottom
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function showView(viewName) {
+            document.getElementById('view-home').classList.add('hidden');
+            document.getElementById('view-create').classList.add('hidden');
+            document.getElementById('view-detail').classList.add('hidden');
+            document.getElementById('view-chat').classList.add('hidden');
+
+            // Reset tab styles
+            const fileTab = document.getElementById('tab-nav-files');
+            const chatTab = document.getElementById('tab-nav-chat');
+            fileTab.className = "px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition text-slate-600 hover:text-indigo-600 flex items-center gap-1.5";
+            chatTab.className = "px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition text-slate-600 hover:text-indigo-600 flex items-center gap-1.5";
+
+            if (viewName === 'home') {
+                document.getElementById('view-home').classList.remove('hidden');
+                fileTab.className = "px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition text-indigo-600 bg-white shadow-sm flex items-center gap-1.5";
+                window.location.hash = '';
+            } else if (viewName === 'create') {
+                document.getElementById('view-create').classList.remove('hidden');
+            } else if (viewName === 'detail') {
+                document.getElementById('view-detail').classList.remove('hidden');
+            } else if (viewName === 'chat') {
+                document.getElementById('view-chat').classList.remove('hidden');
+                chatTab.className = "px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition text-indigo-600 bg-white shadow-sm flex items-center gap-1.5";
+            }
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        app.showCreateForm = function() {
+            if (!currentUser || currentUser.isAnonymous) {
+                showToast("Vui lòng đăng nhập để thực hiện đăng file!", "warning");
+                openAuthModal('login');
+                return;
+            }
+            showView('create');
+        };
+
+        app.openDetail = function(postId) {
+            const post = postsData.find(p => p.id === postId);
+            if (!post) return;
+
+            window.location.hash = `post-${postId}`;
+
+            document.getElementById('detail-title').innerText = post.title;
+            document.getElementById('detail-description').innerText = post.description || "Không có nội dung phụ.";
+            document.getElementById('detail-author').innerHTML = `
+                ${post.isAdmin ? '<span class="bg-red-600 text-white font-extrabold text-[10px] px-1.5 py-0.5 rounded mr-1">ADMIN</span>' : ''}
+                ${escapeHtml(post.author || "Khuyết danh")}
+            `;
+            document.getElementById('detail-author-avatar').innerText = (post.author || "A").charAt(0).toUpperCase();
+            document.getElementById('detail-file-name').innerText = post.fileName || "File-download.zip";
+            document.getElementById('detail-file-size').innerText = `Dung lượng: ${post.fileSize || 'Không xác định'}`;
+            
+            if (post.createdAt) {
+                const date = new Date(post.createdAt);
+                document.getElementById('detail-created-at').innerText = date.toLocaleDateString('vi-VN');
+            } else {
+                document.getElementById('detail-created-at').innerText = 'Gần đây';
+            }
+
+            // Render Preview Gallery (max 3 images)
+            const gallery = document.getElementById('detail-gallery');
+            const galleryContainer = document.getElementById('detail-gallery-container');
+            
+            if (post.previewImages && post.previewImages.length > 0) {
+                galleryContainer.classList.remove('hidden');
+                gallery.innerHTML = post.previewImages.map(imgSrc => `
+                    <div class="rounded-xl overflow-hidden border border-slate-200 shadow-sm bg-slate-100">
+                        <img src="${imgSrc}" class="w-full h-44 object-cover hover:scale-105 transition duration-300 cursor-pointer" onclick="window.open('${imgSrc}', '_blank')">
+                    </div>
+                `).join('');
+            } else {
+                galleryContainer.classList.add('hidden');
+            }
+
+            // Set Download Link
+            const downloadBtn = document.getElementById('detail-download-btn');
+            downloadBtn.href = post.fileDataUrl || '#';
+            downloadBtn.download = post.fileName || 'download';
+
+            showView('detail');
+        };
+
+        function checkUrlHash() {
+            const hash = window.location.hash;
+            if (hash.startsWith('#post-')) {
+                const id = hash.replace('#post-', '');
+                if (postsData.some(p => p.id === id)) {
+                    app.openDetail(id);
+                }
+            }
+        }
+
+        // --- FORM & FILE HANDLING ---
+        const inputFile = document.getElementById('input-file');
+        const fileDropzone = document.getElementById('file-dropzone');
+        const filePlaceholder = document.getElementById('file-placeholder');
+        const fileSelected = document.getElementById('file-selected');
+
+        fileDropzone.addEventListener('click', (e) => {
+            if (e.target.closest('#remove-file-btn')) return;
+            inputFile.click();
+        });
+
+        inputFile.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const max1GB = 1024 * 1024 * 1024;
+            if (file.size > max1GB) {
+                showToast("Tệp vượt quá giới hạn 1GB!", "error");
+                return;
+            }
+
+            selectedFile = file;
+            document.getElementById('file-name').innerText = file.name;
+            document.getElementById('file-size').innerText = formatBytes(file.size);
+
+            filePlaceholder.classList.add('hidden');
+            fileSelected.classList.remove('hidden');
+        });
+
+        document.getElementById('remove-file-btn').addEventListener('click', () => {
+            selectedFile = null;
+            inputFile.value = '';
+            filePlaceholder.classList.remove('hidden');
+            fileSelected.classList.add('hidden');
+        });
+
+        // IMAGE PREVIEW HANDLING (MAX 3 IMAGES)
+        const inputImages = document.getElementById('input-images');
+        const imageUploadBox = document.getElementById('image-upload-box');
+
+        imageUploadBox.addEventListener('click', () => {
+            if (previewImages.length >= 3) {
+                showToast("Bạn chỉ được chọn tối đa 3 ảnh xem trước!", "warning");
+                return;
+            }
+            inputImages.click();
+        });
+
+        inputImages.addEventListener('change', (e) => {
+            const files = Array.from(e.target.files);
+            const remainingSlots = 3 - previewImages.length;
+            const filesToProcess = files.slice(0, remainingSlots);
+
+            filesToProcess.forEach(file => {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    if (previewImages.length < 3) {
+                        previewImages.push(event.target.result);
+                        renderImagePreviews();
+                    }
+                };
+                reader.readAsDataURL(file);
+            });
+
+            inputImages.value = '';
+        });
+
+        function renderImagePreviews() {
+            const grid = document.getElementById('preview-grid');
+            document.getElementById('image-count').innerText = `${previewImages.length}/3`;
+
+            grid.innerHTML = previewImages.map((src, index) => `
+                <div class="relative group rounded-lg overflow-hidden border border-slate-200 h-24">
+                    <img src="${src}" class="w-full h-full object-cover">
+                    <button type="button" onclick="app.removeImage(${index})" class="absolute top-1 right-1 bg-red-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs opacity-90 hover:opacity-100 transition">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+            `).join('');
+
+            if (previewImages.length >= 3) {
+                imageUploadBox.classList.add('opacity-50', 'pointer-events-none');
+            } else {
+                imageUploadBox.classList.remove('opacity-50', 'pointer-events-none');
+            }
+        }
+
+        app.removeImage = function(index) {
+            previewImages.splice(index, 1);
+            renderImagePreviews();
+        };
+
+        // --- SUBMIT FORM & CREATE POST ---
+        document.getElementById('share-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            if (!currentUser || currentUser.isAnonymous) {
+                showToast("Vui lòng đăng nhập trước khi tạo bài!", "warning");
+                openAuthModal('login');
+                return;
+            }
+
+            if (!selectedFile) {
+                showToast("Vui lòng chọn file tải lên!", "warning");
+                return;
+            }
+
+            const title = document.getElementById('input-title').value.trim();
+            const description = document.getElementById('input-description').value.trim();
+            const author = document.getElementById('input-author').value.trim();
+
+            const submitBtn = document.getElementById('submit-post-btn');
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> <span>Đang xử lý tạo bài...</span>`;
+
+            try {
+                const fileDataUrl = await readFileAsDataURL(selectedFile);
+
+                const newPost = {
+                    title: title,
+                    description: description,
+                    author: author,
+                    fileName: selectedFile.name,
+                    fileSize: formatBytes(selectedFile.size),
+                    fileDataUrl: fileDataUrl,
+                    previewImages: previewImages,
+                    userId: currentUser.uid,
+                    isAdmin: isAdmin,
+                    createdAt: Date.now()
+                };
+
+                const postsRef = collection(db, 'artifacts', appId, 'public', 'data', 'posts');
+                const docRef = await addDoc(postsRef, newPost);
+
+                showToast("Đăng bài thành công!", "success");
+
+                document.getElementById('share-form').reset();
+                selectedFile = null;
+                previewImages = [];
+                renderImagePreviews();
+                filePlaceholder.classList.remove('hidden');
+                fileSelected.classList.add('hidden');
+
+                app.openDetail(docRef.id);
+
+            } catch (err) {
+                console.error("Lỗi khi tạo bài:", err);
+                showToast("Không thể lưu tệp. Vui lòng thử lại!", "error");
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = `<i class="fa-solid fa-paper-plane"></i> <span>Đăng & Tạo trang web file</span>`;
+            }
+        });
+
+        // --- CHAT FORM SUBMIT ---
+        document.getElementById('chat-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            if (!currentUser || currentUser.isAnonymous) {
+                showToast("Bạn cần đăng nhập để gửi tin nhắn!", "warning");
+                openAuthModal('login');
+                return;
+            }
+
+            const chatInput = document.getElementById('chat-input');
+            const text = chatInput.value.trim();
+            if (!text) return;
+
+            const sendBtn = document.getElementById('chat-send-btn');
+            sendBtn.disabled = true;
+
+            try {
+                const chatRef = collection(db, 'artifacts', appId, 'public', 'data', 'chats');
+                const authorName = currentUser.displayName || (isAdmin ? "TDZADMIN" : currentUser.email.split('@')[0]);
+
+                await addDoc(chatRef, {
+                    text: text,
+                    author: authorName,
+                    userId: currentUser.uid,
+                    isAdmin: isAdmin,
+                    createdAt: Date.now()
+                });
+
+                chatInput.value = '';
+            } catch (err) {
+                console.error("Lỗi gửi tin nhắn:", err);
+                showToast("Không thể gửi tin nhắn!", "error");
+            } finally {
+                sendBtn.disabled = false;
+            }
+        });
+
+        // --- ADMIN ANNOUNCEMENT LOGIC ---
+        document.getElementById('admin-announcement-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!isAdmin) return;
+
+            const announcementText = document.getElementById('admin-announcement-input').value.trim();
+            if (!announcementText) return;
+
+            try {
+                const annDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'announcements', 'global');
+                await setDoc(annDocRef, {
+                    text: announcementText,
+                    createdAt: Date.now(),
+                    by: 'TDZADMIN'
+                });
+
+                showToast("Phát thông báo toàn server thành công!", "success");
+                document.getElementById('admin-modal').classList.add('hidden');
+            } catch (err) {
+                console.error("Lỗi thông báo:", err);
+                showToast("Không thể lưu thông báo!", "error");
+            }
+        });
+
+        document.getElementById('btn-delete-announcement').addEventListener('click', async () => {
+            if (!isAdmin) return;
+            try {
+                const annDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'announcements', 'global');
+                await deleteDoc(annDocRef);
+                showToast("Đã xóa băng rôn thông báo!", "info");
+                document.getElementById('admin-modal').classList.add('hidden');
+            } catch (err) {
+                console.error("Lỗi xóa thông báo:", err);
+            }
+        });
+
+        document.getElementById('close-announcement-btn').addEventListener('click', () => {
+            document.getElementById('global-announcement-banner').classList.add('hidden');
+        });
+
+        // Helper to read file
+        function readFileAsDataURL(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = error => reject(error);
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // --- AUTHENTICATION MODAL & LOGIC ---
+        const authModal = document.getElementById('auth-modal');
+        const loginForm = document.getElementById('login-form');
+        const registerForm = document.getElementById('register-form');
+        const tabLogin = document.getElementById('tab-login');
+        const tabRegister = document.getElementById('tab-register');
+
+        function openAuthModal(tab = 'login') {
+            authModal.classList.remove('hidden');
+            switchTab(tab);
+        }
+
+        function closeAuthModal() {
+            authModal.classList.add('hidden');
+        }
+
+        function switchTab(tab) {
+            if (tab === 'login') {
+                loginForm.classList.remove('hidden');
+                registerForm.classList.add('hidden');
+                tabLogin.className = "flex-1 pb-3 text-center font-bold text-indigo-600 border-b-2 border-indigo-600";
+                tabRegister.className = "flex-1 pb-3 text-center font-medium text-slate-400 hover:text-slate-600";
+            } else {
+                loginForm.classList.add('hidden');
+                registerForm.classList.remove('hidden');
+                tabRegister.className = "flex-1 pb-3 text-center font-bold text-indigo-600 border-b-2 border-indigo-600";
+                tabLogin.className = "flex-1 pb-3 text-center font-medium text-slate-400 hover:text-slate-600";
+            }
+        }
+
+        tabLogin.addEventListener('click', () => switchTab('login'));
+        tabRegister.addEventListener('click', () => switchTab('register'));
+        document.getElementById('nav-login-btn').addEventListener('click', () => openAuthModal('login'));
+        document.getElementById('nav-register-btn').addEventListener('click', () => openAuthModal('register'));
+        document.getElementById('close-modal-btn').addEventListener('click', closeAuthModal);
+
+        // Register action
+        registerForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('reg-name').value.trim();
+            const email = document.getElementById('reg-email').value.trim();
+            const password = document.getElementById('reg-password').value;
+
+            try {
+                const cred = await createUserWithEmailAndPassword(auth, email, password);
+                await updateProfile(cred.user, { displayName: name });
+                showToast("Đăng ký tài khoản thành công!", "success");
+                closeAuthModal();
+                document.getElementById('input-author').value = name;
+            } catch (err) {
+                console.error("Lỗi đăng ký:", err);
+                showToast(getAuthErrorMessage(err.code), "error");
+            }
+        });
+
+        // Login action (Handles both TDZADMIN alias & regular email)
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            let emailInput = document.getElementById('login-email').value.trim();
+            const password = document.getElementById('login-password').value;
+
+            // Handle TDZADMIN special username
+            if (emailInput.toUpperCase() === ADMIN_USERNAME) {
+                emailInput = ADMIN_EMAIL_ALIAS;
+            }
+
+            try {
+                await signInWithEmailAndPassword(auth, emailInput, password);
+                showToast("Đăng nhập thành công!", "success");
+                closeAuthModal();
+            } catch (err) {
+                // Auto create TDZADMIN if it doesn't exist on server yet
+                if (emailInput === ADMIN_EMAIL_ALIAS && err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found') {
+                    try {
+                        const newAdminCred = await createUserWithEmailAndPassword(auth, ADMIN_EMAIL_ALIAS, "TDZ2013@");
+                        await updateProfile(newAdminCred.user, { displayName: "TDZADMIN" });
+                        showToast("Khởi tạo tài khoản TDZADMIN thành công!", "success");
+                        closeAuthModal();
+                        return;
+                    } catch (createErr) {
+                        console.error("Admin setup err:", createErr);
+                    }
+                }
+                console.error("Lỗi đăng nhập:", err);
+                showToast(getAuthErrorMessage(err.code), "error");
+            }
+        });
+
+        // Logout action
+        document.getElementById('logout-btn').addEventListener('click', async () => {
+            try {
+                await signOut(auth);
+                await signInAnonymously(auth);
+                showToast("Đã đăng xuất!", "info");
+            } catch (err) {
+                console.error("Lỗi đăng xuất:", err);
+            }
+        });
+
+        // Admin Modal Toggle
+        document.getElementById('admin-panel-btn').addEventListener('click', () => {
+            document.getElementById('admin-modal').classList.remove('hidden');
+        });
+        document.getElementById('close-admin-modal-btn').addEventListener('click', () => {
+            document.getElementById('admin-modal').classList.add('hidden');
+        });
+
+        // Auth State Observer
+        onAuthStateChanged(auth, (user) => {
+            currentUser = user;
+            document.getElementById('auth-loading').classList.add('hidden');
+
+            const adminBadgeAvatar = document.getElementById('admin-badge-avatar');
+            const adminTag = document.getElementById('admin-tag');
+            const adminPanelBtn = document.getElementById('admin-panel-btn');
+            const chatUserStatus = document.getElementById('chat-user-status');
+
+            if (user && !user.isAnonymous) {
+                // Check if user is TDZADMIN
+                isAdmin = (user.email === ADMIN_EMAIL_ALIAS || user.displayName === ADMIN_USERNAME);
+
+                document.getElementById('auth-logged-out').classList.add('hidden');
+                document.getElementById('auth-logged-in').classList.remove('hidden');
+
+                const displayName = user.displayName || (isAdmin ? "TDZADMIN" : user.email.split('@')[0]);
+                document.getElementById('user-display-name').innerText = displayName;
+                document.getElementById('user-avatar').innerText = displayName.charAt(0).toUpperCase();
+
+                chatUserStatus.innerHTML = `Đang nhắn với tên: <strong class="${isAdmin ? 'text-amber-400' : 'text-indigo-300'}">${escapeHtml(displayName)}</strong>`;
+
+                if (isAdmin) {
+                    adminBadgeAvatar.classList.remove('hidden');
+                    adminTag.classList.remove('hidden');
+                    adminPanelBtn.classList.remove('hidden');
+                } else {
+                    adminBadgeAvatar.classList.add('hidden');
+                    adminTag.classList.add('hidden');
+                    adminPanelBtn.classList.add('hidden');
+                }
+
+                // Auto-fill author in form if empty
+                const authorInput = document.getElementById('input-author');
+                if (!authorInput.value) {
+                    authorInput.value = displayName;
+                }
+            } else {
+                isAdmin = false;
+                adminBadgeAvatar.classList.add('hidden');
+                adminTag.classList.add('hidden');
+                adminPanelBtn.classList.add('hidden');
+
+                document.getElementById('auth-logged-in').classList.add('hidden');
+                document.getElementById('auth-logged-out').classList.remove('hidden');
+
+                chatUserStatus.innerText = "Chưa đăng nhập (Chỉ xem)";
+            }
+        });
+
+        // --- NAVIGATION & UI HANDLERS ---
+        document.getElementById('logo-btn').addEventListener('click', () => showView('home'));
+        document.getElementById('tab-nav-files').addEventListener('click', () => showView('home'));
+        document.getElementById('tab-nav-chat').addEventListener('click', () => showView('chat'));
+        document.getElementById('back-to-home-btn').addEventListener('click', () => showView('home'));
+        document.getElementById('go-to-create-btn').addEventListener('click', app.showCreateForm);
+        document.getElementById('nav-create-post-btn').addEventListener('click', app.showCreateForm);
+        document.getElementById('cancel-create-btn').addEventListener('click', () => showView('home'));
+
+        document.getElementById('share-link-btn').addEventListener('click', () => {
+            const url = window.location.href;
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(url);
+            } else {
+                document.execCommand('copy');
+            }
+            showToast("Đã sao chép đường link bài viết!", "success");
+        });
+
+        // --- UTILITY FUNCTIONS ---
+        function formatBytes(bytes, decimals = 2) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const dm = decimals < 0 ? 0 : decimals;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            return text
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        function showToast(msg, type = "info") {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toast-message');
+            const toastIcon = document.getElementById('toast-icon');
+
+            toastMsg.innerText = msg;
+
+            if (type === 'success') {
+                toastIcon.className = "fa-solid fa-circle-check text-emerald-400";
+            } else if (type === 'error') {
+                toastIcon.className = "fa-solid fa-circle-exclamation text-rose-400";
+            } else if (type === 'warning') {
+                toastIcon.className = "fa-solid fa-triangle-exclamation text-amber-400";
+            } else {
+                toastIcon.className = "fa-solid fa-circle-info text-indigo-400";
+            }
+
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+
+        function getAuthErrorMessage(code) {
+            switch (code) {
+                case 'auth/email-already-in-use':
+                    return 'Email này đã được sử dụng!';
+                case 'auth/invalid-email':
+                    return 'Địa chỉ email hoặc tài khoản không hợp lệ!';
+                case 'auth/weak-password':
+                    return 'Mật khẩu phải từ 6 ký tự trở lên!';
+                case 'auth/user-not-found':
+                case 'auth/wrong-password':
+                case 'auth/invalid-credential':
+                    return 'Tên tài khoản hoặc mật khẩu không chính xác!';
+                default:
+                    return 'Đã xảy ra lỗi, vui lòng thử lại!';
+            }
+        }
+
+        // --- APP INITIALIZATION ---
+        window.addEventListener('load', async () => {
+            await initAuth();
+            subscribeData();
+        });
+    </script>
+</body>
+</html>
