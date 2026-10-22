@@ -1,107 +1,22 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { 
-    getAuth, 
-    createUserWithEmailAndPassword, 
-    signInWithEmailAndPassword, 
-    onAuthStateChanged, 
-    signOut 
-} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-import { 
-    getFirestore, 
-    collection, 
-    addDoc, 
-    getDocs, 
-    doc, 
-    getDoc, 
-    updateDoc, 
-    deleteDoc, 
-    query, 
-    orderBy, 
-    serverTimestamp, 
-    setDoc 
-} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-
-// Cấu hình Firebase công khai mẫu
-const firebaseConfig = {
-    apiKey: "AIzaSyDummyKeyForShareHubDemo99281",
-    authDomain: "sharehub-demo.firebaseapp.com",
-    projectId: "sharehub-demo",
-    storageBucket: "sharehub-demo.appspot.com",
-    messagingSenderId: "123456789",
-    appId: "1:123456789:web:abcdef"
-};
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-
 let currentUser = null;
 let allFiles = [];
 let selectedImagesBase64 = [];
 
-// Khởi tạo ứng dụng
+// Khởi tạo hệ thống
 window.addEventListener('DOMContentLoaded', () => {
-    checkAdminAccount();
+    // Đảm bảo tài khoản admin luôn tồn tại sẵn trên server giả lập
+    let users = JSON.parse(localStorage.getItem('sharehub_users') || '[]');
+    if (!users.some(u => u.username === 'TDZADMIN')) {
+        users.push({ username: 'TDZADMIN', password: 'TDZ2013@' });
+        localStorage.setItem('sharehub_users', JSON.stringify(users));
+    }
+
+    checkStoredSession();
     loadFiles();
     loadChatMessages();
     checkActiveAnnouncement();
-
-    onAuthStateChanged(auth, async (user) => {
-        currentUser = user;
-        const authNavArea = document.getElementById('authNavArea');
-        const authorInput = document.getElementById('authorName');
-
-        if (user) {
-            let displayName = user.email.split('@')[0];
-            let isAdmin = (user.email === 'tdzadmin@sharehub.com' || displayName.toUpperCase() === 'TDZADMIN');
-
-            if (isAdmin) {
-                displayName = 'TDZADMIN';
-                if (!document.getElementById('adminTabBtn')) {
-                    const navActions = document.querySelector('.nav-actions');
-                    const adminBtn = document.createElement('button');
-                    adminBtn.id = 'adminTabBtn';
-                    adminBtn.className = 'nav-btn';
-                    adminBtn.innerHTML = `<i class="fa-solid fa-shield-halved"></i> Admin`;
-                    adminBtn.onclick = () => switchTab('admin');
-                    navActions.insertBefore(adminBtn, navActions.children[2]);
-                }
-            }
-
-            authNavArea.innerHTML = `
-                <div style="display:flex; align-items:center; gap:8px;">
-                    <span style="font-weight:700; color:var(--primary);">${displayName} ${isAdmin ? '<span class="admin-badge">[ADMIN]</span>' : ''}</span>
-                    <button class="nav-btn" onclick="handleLogout()"><i class="fa-solid fa-right-from-bracket"></i></button>
-                </div>
-            `;
-            if (authorInput) authorInput.value = displayName;
-        } else {
-            authNavArea.innerHTML = `<button class="nav-btn login" onclick="openAuthModal()"><i class="fa-solid fa-user-lock"></i> Đăng nhập</button>`;
-            const adminTab = document.getElementById('adminTabBtn');
-            if (adminTab) adminTab.remove();
-        }
-    });
 });
 
-// Tự động kiểm tra / khởi tạo tài khoản TDZADMIN
-async function checkAdminAccount() {
-    try {
-        await signInWithEmailAndPassword(auth, 'tdzadmin@sharehub.com', 'TDZ2013@');
-    } catch (e) {
-        try {
-            await createUserWithEmailAndPassword(auth, 'tdzadmin@sharehub.com', 'TDZ2013@');
-        } catch (err) {}
-    }
-}
-
-// Chuyển Tab giao diện
-window.switchTab = function(tabName) {
-    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-    document.getElementById(`tab-${tabName}`).classList.add('active');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-// Hiển thị Toast thông báo
 function showToast(message) {
     const toast = document.getElementById('toast');
     toast.innerText = message;
@@ -109,7 +24,13 @@ function showToast(message) {
     setTimeout(() => { toast.style.display = 'none'; }, 3000);
 }
 
-// Xử lý Ảnh Preview (Max 3)
+window.switchTab = function(tabName) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.getElementById(`tab-${tabName}`).classList.add('active');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// Xử lý Ảnh Preview (Tối đa 3 ảnh)
 window.handleImagePreviews = function(event) {
     const files = event.target.files;
     const container = document.getElementById('previewContainer');
@@ -143,8 +64,8 @@ window.checkFileSize = function(input) {
     }
 }
 
-// Đăng bài file mới lên Firestore
-window.handleUpload = async function(event) {
+// Đăng file mới
+window.handleUpload = function(event) {
     event.preventDefault();
     if (!currentUser) {
         showToast('Vui lòng đăng nhập để đăng file!');
@@ -157,58 +78,45 @@ window.handleUpload = async function(event) {
     const subContent = document.getElementById('subContent').value;
     const authorName = document.getElementById('authorName').value;
 
-    showToast('Đang tải lên máy chủ...');
+    const newFile = {
+        id: 'file_' + Date.now(),
+        title: mainTitle,
+        subContent: subContent,
+        author: authorName,
+        fileName: fileInput.files[0] ? fileInput.files[0].name : 'shared_file.zip',
+        fileSize: fileInput.files[0] ? (fileInput.files[0].size / (1024*1024)).toFixed(2) + ' MB' : '15.2 MB',
+        images: selectedImagesBase64,
+        downloads: 0,
+        views: 0,
+        createdAt: Date.now()
+    };
 
-    try {
-        const fileData = {
-            title: mainTitle,
-            subContent: subContent,
-            author: authorName,
-            fileName: fileInput.files[0] ? fileInput.files[0].name : 'shared_file.zip',
-            fileSize: fileInput.files[0] ? (fileInput.files[0].size / (1024*1024)).toFixed(2) + ' MB' : '10.5 MB',
-            images: selectedImagesBase64,
-            downloads: 0,
-            views: 0,
-            createdAt: serverTimestamp()
-        };
+    let files = JSON.parse(localStorage.getItem('sharehub_files') || '[]');
+    files.unshift(newFile);
+    localStorage.setItem('sharehub_files', JSON.stringify(files));
 
-        await addDoc(collection(db, "sharedFiles"), fileData);
-        showToast('Đăng file thành công!');
-        document.getElementById('uploadForm').reset();
-        document.getElementById('previewContainer').innerHTML = '';
-        selectedImagesBase64 = [];
-        loadFiles();
-        switchTab('feed');
-    } catch (e) {
-        showToast('Lỗi đăng file: ' + e.message);
-    }
+    showToast('Tạo trang chia sẻ file thành công!');
+    document.getElementById('uploadForm').reset();
+    document.getElementById('previewContainer').innerHTML = '';
+    selectedImagesBase64 = [];
+    loadFiles();
+    switchTab('feed');
 }
 
-// Tải danh sách file từ Firestore
-async function loadFiles() {
-    const grid = document.getElementById('fileGrid');
-    try {
-        const q = query(collection(db, "sharedFiles"), orderBy("createdAt", "desc"));
-        const snapshot = await getDocs(q);
-        allFiles = [];
-        snapshot.forEach(docSnap => {
-            allFiles.push({ id: docSnap.id, ...docSnap.data() });
-        });
-        renderFiles(allFiles);
-    } catch (e) {
-        grid.innerHTML = `<p style="color:var(--text-muted)">Chưa có dữ liệu hoặc lỗi kết nối máy chủ.</p>`;
-    }
+function loadFiles() {
+    allFiles = JSON.parse(localStorage.getItem('sharehub_files') || '[]');
+    renderFiles(allFiles);
 }
 
 function renderFiles(files) {
     const grid = document.getElementById('fileGrid');
     if (files.length === 0) {
-        grid.innerHTML = `<p style="color:var(--text-muted)">Không tìm thấy file nào.</p>`;
+        grid.innerHTML = `<p style="color:var(--text-muted)">Chưa có file nào được chia sẻ.</p>`;
         return;
     }
 
     grid.innerHTML = files.map(file => {
-        let isAdmin = (file.author === 'TDZADMIN');
+        let isAdmin = (file.author.toUpperCase() === 'TDZADMIN');
         let thumbHtml = file.images && file.images.length > 0 
             ? `<div class="file-card-thumbs">${file.images.map(img => `<img src="${img}">`).join('')}</div>` 
             : '';
@@ -218,7 +126,7 @@ function renderFiles(files) {
                 <div>
                     <div class="file-card-header">
                         <h3 class="file-card-title" onclick="viewFileDetail('${file.id}')">${file.title}</h3>
-                        <span class="file-badge">${file.fileSize || 'File'}</span>
+                        <span class="file-badge">${file.fileSize}</span>
                     </div>
                     <p class="file-card-desc">${file.subContent || 'Không có mô tả phụ.'}</p>
                     ${thumbHtml}
@@ -243,49 +151,50 @@ window.filterFiles = function() {
     renderFiles(filtered);
 }
 
-// Xem chi tiết bài viết
-window.viewFileDetail = async function(fileId) {
+// Xem chi tiết file
+window.viewFileDetail = function(fileId) {
     switchTab('detail');
     const detailContainer = document.getElementById('detailContent');
-    detailContainer.innerHTML = `<div style="text-align:center; padding:40px;"><i class="fa-solid fa-spinner fa-spin fa-2x"></i></div>`;
+    let files = JSON.parse(localStorage.getItem('sharehub_files') || '[]');
+    const file = files.find(f => f.id === fileId);
 
-    try {
-        const docRef = doc(db, "sharedFiles", fileId);
-        const docSnap = await getDoc(docRef);
+    if (file) {
+        file.views = (file.views || 0) + 1;
+        localStorage.setItem('sharehub_files', JSON.stringify(files));
 
-        if (docSnap.exists()) {
-            const data = docSnap.data();
-            let isAdmin = (data.author === 'TDZADMIN');
+        let isAdmin = (file.author.toUpperCase() === 'TDZADMIN');
+        let galleryHtml = file.images && file.images.length > 0
+            ? `<div class="detail-gallery">${file.images.map(img => `<img src="${img}">`).join('')}</div>`
+            : '';
 
-            await updateDoc(docRef, { views: (data.views || 0) + 1 });
-
-            let galleryHtml = data.images && data.images.length > 0
-                ? `<div class="detail-gallery">${data.images.map(img => `<img src="${img}">`).join('')}</div>`
-                : '';
-
-            detailContainer.innerHTML = `
-                <h1 class="detail-main-title">${data.title}</h1>
-                <div class="detail-sub-content">${data.subContent || 'Không có nội dung phụ mô tả.'}</div>
-                ${galleryHtml}
-                <div class="detail-download-box">
-                    <p style="margin-bottom: 15px; color:var(--text-muted);"><i class="fa-solid fa-file-zipper"></i> Tệp: <strong>${data.fileName}</strong> (${data.fileSize})</p>
-                    <a href="#" class="download-btn" onclick="triggerDownload('${data.fileName}')"><i class="fa-solid fa-download"></i> Tải file về máy</a>
-                </div>
-                <div class="detail-footer-info">
-                    <span>Tác giả: <strong>${data.author}</strong> ${isAdmin ? '<span class="admin-badge">[ADMIN]</span>' : ''}</span>
-                    <span>Lượt tải: <strong id="dlCount">${data.downloads || 0}</strong> | Lượt xem: <strong>${(data.views || 0) + 1}</strong></span>
-                </div>
-            `;
-        } else {
-            detailContainer.innerHTML = `<p>Không tìm thấy file này trên máy chủ.</p>`;
-        }
-    } catch (e) {
-        detailContainer.innerHTML = `<p>Lỗi tải thông tin chi tiết.</p>`;
+        detailContainer.innerHTML = `
+            <h1 class="detail-main-title">${file.title}</h1>
+            <div class="detail-sub-content">${file.subContent || 'Không có nội dung phụ mô tả.'}</div>
+            ${galleryHtml}
+            <div class="detail-download-box">
+                <p style="margin-bottom: 15px; color:var(--text-muted);"><i class="fa-solid fa-file-zipper"></i> Tệp: <strong>${file.fileName}</strong> (${file.fileSize})</p>
+                <a href="#" class="download-btn" onclick="triggerDownload('${file.id}')"><i class="fa-solid fa-download"></i> Tải file về máy</a>
+            </div>
+            <div class="detail-footer-info">
+                <span>Tác giả: <strong>${file.author}</strong> ${isAdmin ? '<span class="admin-badge">[ADMIN]</span>' : ''}</span>
+                <span>Lượt tải: <strong id="dlCount">${file.downloads || 0}</strong> | Lượt xem: <strong>${file.views}</strong></span>
+            </div>
+        `;
+    } else {
+        detailContainer.innerHTML = `<p>Không tìm thấy file.</p>`;
     }
 }
 
-window.triggerDownload = function(fileName) {
-    showToast(`Đang bắt đầu tải xuống: ${fileName}`);
+window.triggerDownload = function(fileId) {
+    let files = JSON.parse(localStorage.getItem('sharehub_files') || '[]');
+    const file = files.find(f => f.id === fileId);
+    if (file) {
+        file.downloads = (file.downloads || 0) + 1;
+        localStorage.setItem('sharehub_files', JSON.stringify(files));
+        const dlEl = document.getElementById('dlCount');
+        if (dlEl) dlEl.innerText = file.downloads;
+        showToast(`Bắt đầu tải xuống: ${file.fileName}`);
+    }
 }
 
 window.copyShareLink = function(fileId) {
@@ -294,42 +203,34 @@ window.copyShareLink = function(fileId) {
     showToast('Đã sao chép liên kết chia sẻ!');
 }
 
-// Phòng trò chuyện realtime
-async function loadChatMessages() {
+// Phòng trò chuyện
+function loadChatMessages() {
     const chatContainer = document.getElementById('chatMessages');
-    try {
-        const q = query(collection(db, "communityChat"), orderBy("createdAt", "asc"));
-        const snapshot = await getDocs(q);
-        chatContainer.innerHTML = '';
-        snapshot.forEach(docSnap => {
-            const msg = docSnap.data();
-            appendChatMessageUI(msg);
-        });
-        chatContainer.scrollTop = chatContainer.scrollHeight;
-    } catch (e) {
-        chatContainer.innerHTML = `<p style="color:var(--text-muted)">Chưa có tin nhắn nào.</p>`;
+    const messages = JSON.parse(localStorage.getItem('sharehub_chat') || '[]');
+    chatContainer.innerHTML = '';
+
+    if (messages.length === 0) {
+        chatContainer.innerHTML = `<p style="color:var(--text-muted)">Chưa có tin nhắn nào trong phòng chat.</p>`;
+        return;
     }
-}
 
-function appendChatMessageUI(msg) {
-    const chatContainer = document.getElementById('chatMessages');
-    let isAdmin = (msg.author === 'TDZADMIN');
-    let isMine = currentUser && currentUser.email === msg.email;
-
-    const div = document.createElement('div');
-    div.className = `chat-msg ${isMine ? 'mine' : ''}`;
-    div.innerHTML = `
-        <div class="chat-msg-header">
-            <span class="chat-msg-author">${msg.author} ${isAdmin ? '<span class="admin-badge">[ADMIN]</span>' : ''}</span>
-            <span>${new Date(msg.createdAt?.toDate?.() || Date.now()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-        </div>
-        <div class="chat-msg-body">${msg.text}</div>
-    `;
-    chatContainer.appendChild(div);
+    chatContainer.innerHTML = messages.map(msg => {
+        let isAdmin = (msg.author.toUpperCase() === 'TDZADMIN');
+        let isMine = currentUser && currentUser === msg.author;
+        return `
+            <div class="chat-msg ${isMine ? 'mine' : ''}">
+                <div class="chat-msg-header">
+                    <span class="chat-msg-author">${msg.author} ${isAdmin ? '<span class="admin-badge">[ADMIN]</span>' : ''}</span>
+                    <span>${new Date(msg.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                </div>
+                <div class="chat-msg-body">${msg.text}</div>
+            </div>
+        `;
+    }).join('');
     chatContainer.scrollTop = chatContainer.scrollHeight;
 }
 
-window.sendChatMessage = async function(event) {
+window.sendChatMessage = function(event) {
     event.preventDefault();
     if (!currentUser) {
         showToast('Vui lòng đăng nhập để nhắn tin!');
@@ -341,32 +242,20 @@ window.sendChatMessage = async function(event) {
     const text = input.value.trim();
     if (!text) return;
 
-    let authorName = currentUser.email.split('@')[0];
-    if (currentUser.email === 'tdzadmin@sharehub.com') authorName = 'TDZADMIN';
-
-    const msgData = {
+    let messages = JSON.parse(localStorage.getItem('sharehub_chat') || '[]');
+    messages.push({
+        author: currentUser,
         text: text,
-        author: authorName,
-        email: currentUser.email,
-        createdAt: serverTimestamp()
-    };
-
-    try {
-        await addDoc(collection(db, "communityChat"), msgData);
-        input.value = '';
-        loadChatMessages();
-    } catch (e) {
-        showToast('Không gửi được tin nhắn.');
-    }
+        time: Date.now()
+    });
+    localStorage.setItem('sharehub_chat', JSON.stringify(messages));
+    input.value = '';
+    loadChatMessages();
 }
 
-// Hệ thống Đăng nhập / Đăng ký
-window.openAuthModal = function() {
-    document.getElementById('authModal').style.display = 'flex';
-}
-window.closeAuthModal = function() {
-    document.getElementById('authModal').style.display = 'none';
-}
+// Xác thực & Tài khoản
+window.openAuthModal = function() { document.getElementById('authModal').style.display = 'flex'; }
+window.closeAuthModal = function() { document.getElementById('authModal').style.display = 'none'; }
 window.switchAuthMode = function(mode) {
     document.getElementById('tabLoginBtn').classList.toggle('active', mode === 'login');
     document.getElementById('tabRegisterBtn').classList.toggle('active', mode === 'register');
@@ -374,82 +263,116 @@ window.switchAuthMode = function(mode) {
     document.getElementById('registerForm').classList.toggle('active', mode === 'register');
 }
 
-window.handleRegister = async function(event) {
+window.handleRegister = function(event) {
     event.preventDefault();
     const username = document.getElementById('regUsername').value.trim();
-    const email = document.getElementById('regEmail').value.trim();
     const password = document.getElementById('regPassword').value;
 
-    try {
-        await createUserWithEmailAndPassword(auth, email, password);
-        showToast('Đăng ký tài khoản thành công!');
-        closeAuthModal();
-    } catch (e) {
-        showToast('Lỗi đăng ký: ' + e.message);
+    let users = JSON.parse(localStorage.getItem('sharehub_users') || '[]');
+    if (users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
+        showToast('Tên tài khoản đã tồn tại!');
+        return;
     }
+
+    users.push({ username, password });
+    localStorage.setItem('sharehub_users', JSON.stringify(users));
+    showToast('Đăng ký thành công! Hãy đăng nhập.');
+    switchAuthMode('login');
 }
 
-window.handleLogin = async function(event) {
+window.handleLogin = function(event) {
     event.preventDefault();
-    let identifier = document.getElementById('loginEmail').value.trim();
+    const usernameInput = document.getElementById('loginEmail').value.trim();
     const password = document.getElementById('loginPassword').value;
 
-    if (identifier.toUpperCase() === 'TDZADMIN') {
-        identifier = 'tdzadmin@sharehub.com';
-    } else if (!identifier.includes('@')) {
-        identifier = identifier + '@sharehub.com';
-    }
+    let users = JSON.parse(localStorage.getItem('sharehub_users') || '[]');
+    const user = users.find(u => u.username.toLowerCase() === usernameInput.toLowerCase() && u.password === password);
 
-    try {
-        await signInWithEmailAndPassword(auth, identifier, password);
-        showToast('Đăng nhập thành công!');
+    if (user) {
+        currentUser = user.username;
+        localStorage.setItem('sharehub_session', currentUser);
+        updateAuthUI();
         closeAuthModal();
-    } catch (e) {
+        showToast(`Đăng nhập thành công với tên ${currentUser}!`);
+    } else {
         showToast('Sai tài khoản hoặc mật khẩu!');
     }
 }
 
-window.handleLogout = async function() {
-    await signOut(auth);
-    showToast('Đã đăng xuất tài khoản.');
+window.handleLogout = function() {
+    currentUser = null;
+    localStorage.removeItem('sharehub_session');
+    updateAuthUI();
+    showToast('Đã đăng xuất.');
+    switchTab('feed');
 }
 
-// Admin Announcement
-window.publishAnnouncement = async function() {
-    if (!currentUser || currentUser.email !== 'tdzadmin@sharehub.com') {
+function checkStoredSession() {
+    const session = localStorage.getItem('sharehub_session');
+    if (session) {
+        currentUser = session;
+        updateAuthUI();
+    }
+}
+
+function updateAuthUI() {
+    const authNavArea = document.getElementById('authNavArea');
+    const authorInput = document.getElementById('authorName');
+
+    if (currentUser) {
+        let isAdmin = (currentUser.toUpperCase() === 'TDZADMIN');
+        if (isAdmin && !document.getElementById('adminTabBtn')) {
+            const navActions = document.querySelector('.nav-actions');
+            const adminBtn = document.createElement('button');
+            adminBtn.id = 'adminTabBtn';
+            adminBtn.className = 'nav-btn';
+            adminBtn.innerHTML = `<i class="fa-solid fa-shield-halved"></i> Admin`;
+            adminBtn.onclick = () => switchTab('admin');
+            navActions.insertBefore(adminBtn, navActions.children[2]);
+        }
+
+        authNavArea.innerHTML = `
+            <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-weight:700; color:var(--primary);">${currentUser} ${isAdmin ? '<span class="admin-badge">[ADMIN]</span>' : ''}</span>
+                <button class="nav-btn" onclick="handleLogout()"><i class="fa-solid fa-right-from-bracket"></i></button>
+            </div>
+        `;
+        if (authorInput) authorInput.value = currentUser;
+    } else {
+        authNavArea.innerHTML = `<button class="nav-btn login" onclick="openAuthModal()"><i class="fa-solid fa-user-lock"></i> Đăng nhập</button>`;
+        const adminTab = document.getElementById('adminTabBtn');
+        if (adminTab) adminTab.remove();
+    }
+}
+
+// Thông báo Server của Admin
+window.publishAnnouncement = function() {
+    if (!currentUser || currentUser.toUpperCase() !== 'TDZADMIN') {
         showToast('Chỉ tài khoản Admin mới có quyền này!');
         return;
     }
     const text = document.getElementById('adminAnnouncementInput').value.trim();
     if (!text) return;
 
-    try {
-        await setDoc(doc(db, "serverConfig", "announcement"), { text: text, active: true });
-        showToast('Đã phát thông báo toàn server!');
-        checkActiveAnnouncement();
-    } catch (e) {
-        showToast('Lỗi phát thông báo.');
-    }
+    localStorage.setItem('sharehub_announcement', JSON.stringify({ text, active: true }));
+    showToast('Đã phát thông báo toàn server!');
+    checkActiveAnnouncement();
 }
 
-window.clearAnnouncement = async function() {
-    try {
-        await setDoc(doc(db, "serverConfig", "announcement"), { text: "", active: false });
+window.clearAnnouncement = function() {
+    localStorage.removeItem('sharehub_announcement');
+    document.getElementById('announcement-banner').style.display = 'none';
+    showToast('Đã xóa thông báo.');
+}
+
+function checkActiveAnnouncement() {
+    const ann = JSON.parse(localStorage.getItem('sharehub_announcement'));
+    if (ann && ann.active && ann.text) {
+        document.getElementById('banner-text').innerText = ann.text;
+        document.getElementById('announcement-banner').style.display = 'flex';
+    } else {
         document.getElementById('announcement-banner').style.display = 'none';
-        showToast('Đã xóa thông báo.');
-    } catch (e) {}
-}
-
-async function checkActiveAnnouncement() {
-    try {
-        const snap = await getDoc(doc(db, "serverConfig", "announcement"));
-        if (snap.exists() && snap.data().active && snap.data().text) {
-            document.getElementById('banner-text').innerText = snap.data().text;
-            document.getElementById('announcement-banner').style.display = 'flex';
-        } else {
-            document.getElementById('announcement-banner').style.display = 'none';
-        }
-    } catch (e) {}
+    }
 }
 
 window.dismissBanner = function() {
