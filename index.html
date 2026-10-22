@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ShareHub - Chia Sẻ File Cộng Đồng</title>
-    <!-- Font Awesome & Google Fonts -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
@@ -51,17 +50,10 @@
             
             <div class="section-header">
                 <h2><i class="fa-solid fa-fire"></i> File mới được chia sẻ</h2>
-                <div class="filter-pills">
-                    <button class="pill active" onclick="filterCategory('all')">Tất cả</button>
-                    <button class="pill" onclick="filterCategory('document')">Tài liệu</button>
-                    <button class="pill" onclick="filterCategory('media')">Hình ảnh/Media</button>
-                    <button class="pill" onclick="filterCategory('archive')">Phần mềm/Zip</button>
-                </div>
             </div>
 
             <div id="fileGrid" class="file-grid">
-                <!-- Danh sách file sẽ được render bằng JS -->
-                <div class="loading-placeholder"><i class="fa-solid fa-spinner fa-spin"></i> Đang tải danh sách file từ máy chủ...</div>
+                <!-- Render bằng JS -->
             </div>
         </section>
 
@@ -80,7 +72,7 @@
 
                     <div class="input-group">
                         <label><i class="fa-solid fa-images"></i> Ảnh xem trước (Tối đa 3 ảnh):</label>
-                        <input type="file" id="previewImages" accept="image/*" multiple max="3" onchange="handleImagePreviews(event)">
+                        <input type="file" id="previewImages" accept="image/*" multiple onchange="handleImagePreviews(event)">
                         <div id="previewContainer" class="preview-container"></div>
                     </div>
 
@@ -104,24 +96,20 @@
             </div>
         </section>
 
-        <!-- TAB 3: CHI TIẾT FILE (DETAIL VIEW) -->
+        <!-- TAB 3: CHI TIẾT FILE -->
         <section id="tab-detail" class="tab-content">
             <button class="back-btn" onclick="switchTab('feed')"><i class="fa-solid fa-arrow-left"></i> Quay lại trang chủ</button>
-            <div id="detailContent" class="detail-card">
-                <!-- Nội dung chi tiết hiển thị ở đây -->
-            </div>
+            <div id="detailContent" class="detail-card"></div>
         </section>
 
-        <!-- TAB 4: PHÒNG TRÒ CHUYỆN (COMMUNITY CHAT) -->
+        <!-- TAB 4: PHÒNG TRÒ CHUYỆN -->
         <section id="tab-chat" class="tab-content">
             <div class="chat-wrapper">
                 <div class="chat-header">
                     <h2><i class="fa-solid fa-comments"></i> Phòng Trò chuyện Cộng đồng</h2>
                     <p>Trao đổi, thảo luận trực tiếp cùng các thành viên khác trong server.</p>
                 </div>
-                <div id="chatMessages" class="chat-messages">
-                    <!-- Tin nhắn render ở đây -->
-                </div>
+                <div id="chatMessages" class="chat-messages"></div>
                 <form id="chatForm" class="chat-input-form" onsubmit="sendChatMessage(event)">
                     <input type="text" id="chatInput" placeholder="Nhập nội dung tin nhắn..." required autocomplete="off">
                     <button type="submit"><i class="fa-solid fa-paper-plane"></i> Gửi</button>
@@ -129,7 +117,7 @@
             </div>
         </section>
 
-        <!-- TAB 5: ADMIN DASHBOARD (QUẢN LÝ THÔNG BÁO) -->
+        <!-- TAB 5: ADMIN DASHBOARD -->
         <section id="tab-admin" class="tab-content">
             <div class="admin-card">
                 <h2><i class="fa-solid fa-shield-halved"></i> Bảng điều khiển Admin [TDZADMIN]</h2>
@@ -158,8 +146,8 @@
             <!-- Form Đăng nhập -->
             <form id="loginForm" class="auth-form active" onsubmit="handleLogin(event)">
                 <div class="input-group">
-                    <label>Tài khoản / Email:</label>
-                    <input type="text" id="loginEmail" placeholder="Nhập tên tài khoản hoặc email..." required>
+                    <label>Tên tài khoản / Email:</label>
+                    <input type="text" id="loginEmail" placeholder="Nhập tài khoản (VD: TDZADMIN)..." required>
                 </div>
                 <div class="input-group">
                     <label>Mật khẩu:</label>
@@ -175,10 +163,6 @@
                     <input type="text" id="regUsername" placeholder="Chọn tên tài khoản..." required>
                 </div>
                 <div class="input-group">
-                    <label>Email:</label>
-                    <input type="email" id="regEmail" placeholder="Nhập địa chỉ email..." required>
-                </div>
-                <div class="input-group">
                     <label>Mật khẩu:</label>
                     <input type="password" id="regPassword" placeholder="Tạo mật khẩu bảo mật..." required>
                 </div>
@@ -190,7 +174,6 @@
     <!-- TOAST NOTIFICATION -->
     <div id="toast" class="toast"></div>
 
-    <!-- Firebase SDK (Modular) -->
-    <script type="module" src="script.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>
