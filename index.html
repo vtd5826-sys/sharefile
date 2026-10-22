@@ -32,6 +32,8 @@
             <button class="nav-btn" onclick="switchTab('feed')"><i class="fa-solid fa-house"></i> Trang chủ</button>
             <button class="nav-btn" onclick="switchTab('chat')"><i class="fa-solid fa-comments"></i> Trò chuyện</button>
             <button class="nav-btn primary" onclick="switchTab('upload')"><i class="fa-solid fa-cloud-arrow-up"></i> Đăng file</button>
+            <!-- Hòm thư Admin sẽ được render tự động qua JS nếu là TDZADMIN -->
+            <div id="adminInboxNavArea"></div>
             <div id="authNavArea">
                 <button class="nav-btn login" onclick="openAuthModal()"><i class="fa-solid fa-user-lock"></i> Đăng nhập</button>
             </div>
@@ -115,17 +117,45 @@
             </div>
         </section>
 
-        <!-- TAB 5: ADMIN DASHBOARD -->
+        <!-- TAB 5: ADMIN DASHBOARD & HÒM THƯ -->
         <section id="tab-admin" class="tab-content">
-            <div class="admin-card">
-                <h2><i class="fa-solid fa-shield-halved"></i> Bảng điều khiển Admin [TDZADMIN]</h2>
-                <p>Công cụ quản trị hệ thống và phát thông báo toàn server.</p>
+            <div class="admin-card" style="max-width: 1000px;">
+                <h2><i class="fa-solid fa-shield-halved"></i> Bảng điều khiển Quản trị viên [TDZADMIN]</h2>
+                <p>Công cụ phát thông báo, quản lý tài khoản và kiểm duyệt báo cáo từ người chơi.</p>
                 
+                <!-- Quản lý thông báo Server -->
                 <div class="admin-action-box">
-                    <h3>Phát thông báo toàn Server</h3>
-                    <textarea id="adminAnnouncementInput" rows="3" placeholder="Nhập nội dung thông báo hiển thị cho toàn bộ server..."></textarea>
-                    <button class="admin-btn" onclick="publishAnnouncement()"><i class="fa-solid fa-bullhorn"></i> Phát thông báo ngay</button>
-                    <button class="admin-btn danger" onclick="clearAnnouncement()"><i class="fa-solid fa-trash"></i> Xóa thông báo hiện tại</button>
+                    <h3><i class="fa-solid fa-bullhorn"></i> Phát thông báo toàn Server</h3>
+                    <textarea id="adminAnnouncementInput" rows="2" placeholder="Nhập nội dung thông báo hiển thị cho toàn bộ server..."></textarea>
+                    <button class="admin-btn" onclick="publishAnnouncement()"><i class="fa-solid fa-paper-plane"></i> Phát ngay</button>
+                    <button class="admin-btn danger" onclick="clearAnnouncement()"><i class="fa-solid fa-trash"></i> Xóa thông báo</button>
+                </div>
+
+                <!-- Hòm thư báo cáo -->
+                <div class="admin-action-box" style="margin-top: 25px;">
+                    <h3><i class="fa-solid fa-inbox"></i> Hòm thư Báo cáo từ Người chơi</h3>
+                    <div id="adminReportList" class="report-list-container">
+                        <!-- Danh sách báo cáo render ở đây -->
+                    </div>
+                </div>
+
+                <!-- Quản lý tài khoản toàn Server -->
+                <div class="admin-action-box" style="margin-top: 25px;">
+                    <h3><i class="fa-solid fa-users-gear"></i> Quản lý Tất cả Tài khoản (Server Accounts)</h3>
+                    <div style="overflow-x: auto; margin-top: 15px;">
+                        <table class="admin-table" id="accountsTable">
+                            <thead>
+                                <tr>
+                                    <th>Tên tài khoản</th>
+                                    <th>Trạng thái Ban</th>
+                                    <th>Thao tác</th>
+                                </tr>
+                            </thead>
+                            <tbody id="accountsTableBody">
+                                <!-- Render danh sách account -->
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </section>
@@ -165,6 +195,59 @@
                     <input type="password" id="regPassword" placeholder="Tạo mật khẩu bảo mật..." required>
                 </div>
                 <button type="submit" class="auth-submit-btn">Đăng ký tài khoản</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- BAN MODAL (Dành cho Admin) -->
+    <div id="banModal" class="modal-overlay">
+        <div class="modal-card">
+            <button class="close-modal" onclick="closeBanModal()">&times;</button>
+            <h3><i class="fa-solid fa-user-slash"></i> Cấm (Ban) Tài khoản: <span id="banTargetUser" style="color:var(--primary);"></span></h3>
+            <form onsubmit="confirmBan(event)" style="margin-top: 15px;">
+                <div class="input-group">
+                    <label>Thời gian cấm:</label>
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
+                        <div><small>Năm</small><input type="number" id="banYears" value="0" min="0"></div>
+                        <div><small>Tháng</small><input type="number" id="banMonths" value="0" min="0"></div>
+                        <div><small>Tuần</small><input type="number" id="banWeeks" value="0" min="0"></div>
+                        <div><small>Ngày</small><input type="number" id="banDays" value="0" min="0"></div>
+                        <div><small>Giờ</small><input type="number" id="banHours" value="0" min="0"></div>
+                        <div><small>Phút</small><input type="number" id="banMinutes" value="0" min="0"></div>
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label>Lý do vi phạm:</label>
+                    <select id="banReasonPreset" onchange="selectBanPreset(this)" style="width:100%; background:var(--bg-input); border:1px solid var(--border); color:#fff; padding:10px; border-radius:8px; margin-bottom:8px;">
+                        <option value="">-- Chọn lý do gắn sẵn hoặc tự nhập --</option>
+                        <option value="Bài viết chứa nội dung nhạy cảm">Bài viết chứa nội dung nhạy cảm</option>
+                        <option value="Bài viết chứa nội dung bạo lực">Bài viết chứa nội dung bạo lực</option>
+                    </select>
+                    <textarea id="banReasonCustom" rows="3" placeholder="Hoặc nhập ghi chú / lý do cụ thể..."></textarea>
+                </div>
+                <button type="submit" class="auth-submit-btn" style="background:var(--admin-red); color:#fff;">Xác nhận Ban tài khoản</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- REPORT MODAL (Dành cho Người dùng) -->
+    <div id="reportModal" class="modal-overlay">
+        <div class="modal-card">
+            <button class="close-modal" onclick="closeReportModal()">&times;</button>
+            <h3><i class="fa-solid fa-triangle-exclamation" style="color:var(--admin-red);"></i> Báo cáo bài viết</h3>
+            <form onsubmit="submitReport(event)" style="margin-top: 15px;">
+                <input type="hidden" id="reportFileId">
+                <div class="input-group">
+                    <label>Lý do báo cáo:</label>
+                    <select id="reportReason" required style="width:100%; background:var(--bg-input); border:1px solid var(--border); color:#fff; padding:10px; border-radius:8px;">
+                        <option value="Bài viết chứa nội dung nhạy cảm">Bài viết chứa nội dung nhạy cảm</option>
+                        <option value="Bài viết chứa nội dung bạo lực">Bài viết chứa nội dung bạo lực</option>
+                        <option value="Lừa đảo / Spam / Vi phạm bản quyền">Lừa đảo / Spam / Vi phạm bản quyền</option>
+                        <option value="Khác">Lý do khác</option>
+                    </select>
+                </div>
+                <button type="submit" class="auth-submit-btn">Gửi báo cáo cho Admin</button>
             </form>
         </div>
     </div>
