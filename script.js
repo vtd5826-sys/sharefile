@@ -5,7 +5,6 @@ let selectedImagesBase64 = [];
 // Khởi tạo hệ thống chạy ngay lập tức
 (function initApp() {
     let users = JSON.parse(localStorage.getItem('sharehub_users') || '[]');
-    // Đảm bảo tài khoản admin TDZADMIN luôn tồn tại
     if (!users.some(u => u.username.toUpperCase() === 'TDZADMIN')) {
         users.push({ username: 'TDZADMIN', password: 'TDZ2013@' });
         localStorage.setItem('sharehub_users', JSON.stringify(users));
@@ -64,7 +63,7 @@ window.checkFileSize = function(input) {
     }
 }
 
-// Đăng file mới
+// Đăng file mới & lưu lại dữ liệu file thật
 window.handleUpload = function(event) {
     event.preventDefault();
     if (!currentUser) {
@@ -78,29 +77,48 @@ window.handleUpload = function(event) {
     const subContent = document.getElementById('subContent').value;
     const authorName = document.getElementById('authorName').value;
 
-    const newFile = {
-        id: 'file_' + Date.now(),
-        title: mainTitle,
-        subContent: subContent,
-        author: authorName,
-        fileName: fileInput.files[0] ? fileInput.files[0].name : 'shared_file.zip',
-        fileSize: fileInput.files[0] ? (fileInput.files[0].size / (1024*1024)).toFixed(2) + ' MB' : '15.2 MB',
-        images: selectedImagesBase64,
-        downloads: 0,
-        views: 0,
-        createdAt: Date.now()
+    const file = fileInput.files[0];
+    if (!file) {
+        showToast('Vui lòng chọn file cần chia sẻ!');
+        return;
+    }
+
+    showToast('Đang xử lý và tải lên file...');
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const fileDataUrl = e.target.result;
+
+        const newFile = {
+            id: 'file_' + Date.now(),
+            title: mainTitle,
+            subContent: subContent,
+            author: authorName,
+            fileName: file.name,
+            fileSize: (file.size / (1024*1024)).toFixed(2) + ' MB',
+            fileDataUrl: fileDataUrl,
+            images: selectedImagesBase64,
+            downloads: 0,
+            views: 0,
+            createdAt: Date.now()
+        };
+
+        try {
+            let files = JSON.parse(localStorage.getItem('sharehub_files') || '[]');
+            files.unshift(newFile);
+            localStorage.setItem('sharehub_files', JSON.stringify(files));
+
+            showToast('Tạo trang chia sẻ file thành công!');
+            document.getElementById('uploadForm').reset();
+            document.getElementById('previewContainer').innerHTML = '';
+            selectedImagesBase64 = [];
+            loadFiles();
+            switchTab('feed');
+        } catch (err) {
+            showToast('Lỗi: File quá lớn để lưu trữ trực tiếp trên trình duyệt!');
+        }
     };
-
-    let files = JSON.parse(localStorage.getItem('sharehub_files') || '[]');
-    files.unshift(newFile);
-    localStorage.setItem('sharehub_files', JSON.stringify(files));
-
-    showToast('Tạo trang chia sẻ file thành công!');
-    document.getElementById('uploadForm').reset();
-    document.getElementById('previewContainer').innerHTML = '';
-    selectedImagesBase64 = [];
-    loadFiles();
-    switchTab('feed');
+    reader.readAsDataURL(file);
 }
 
 function loadFiles() {
@@ -117,8 +135,14 @@ function renderFiles(files) {
 
     grid.innerHTML = files.map(file => {
         let isAdmin = (file.author.toUpperCase() === 'TDZADMIN');
+        let canDelete = currentUser && (currentUser === file.author || currentUser.toUpperCase() === 'TDZADMIN');
+        
         let thumbHtml = file.images && file.images.length > 0 
             ? `<div class="file-card-thumbs">${file.images.map(img => `<img src="${img}">`).join('')}</div>` 
+            : '';
+
+        let deleteBtnHtml = canDelete 
+            ? `<button class="action-icon-btn" style="border-color: #ff3366; color: #ff3366;" onclick="deleteFile('${file.id}')" title="Xóa file"><i class="fa-solid fa-trash"></i></button>` 
             : '';
 
         return `
@@ -138,6 +162,7 @@ function renderFiles(files) {
                     <div class="card-actions">
                         <button class="action-icon-btn" onclick="viewFileDetail('${file.id}')" title="Xem chi tiết"><i class="fa-solid fa-eye"></i></button>
                         <button class="action-icon-btn" onclick="copyShareLink('${file.id}')" title="Sao chép Link"><i class="fa-solid fa-share-nodes"></i></button>
+                        ${deleteBtnHtml}
                     </div>
                 </div>
             </div>
@@ -149,6 +174,19 @@ window.filterFiles = function() {
     const keyword = document.getElementById('searchInput').value.toLowerCase();
     const filtered = allFiles.filter(f => f.title.toLowerCase().includes(keyword) || f.author.toLowerCase().includes(keyword));
     renderFiles(filtered);
+}
+
+// Xóa file/bài viết
+window.deleteFile = function(fileId) {
+    if (!confirm('Bạn có chắc chắn muốn xóa bài viết này không?')) return;
+
+    let files = JSON.parse(localStorage.getItem('sharehub_files') || '[]');
+    files = files.filter(f => f.id !== fileId);
+    localStorage.setItem('sharehub_files', JSON.stringify(files));
+
+    showToast('Đã xóa bài viết thành công!');
+    switchTab('feed');
+    loadFiles();
 }
 
 // Xem chi tiết file
@@ -163,8 +201,14 @@ window.viewFileDetail = function(fileId) {
         localStorage.setItem('sharehub_files', JSON.stringify(files));
 
         let isAdmin = (file.author.toUpperCase() === 'TDZADMIN');
+        let canDelete = currentUser && (currentUser === file.author || currentUser.toUpperCase() === 'TDZADMIN');
+
         let galleryHtml = file.images && file.images.length > 0
             ? `<div class="detail-gallery">${file.images.map(img => `<img src="${img}">`).join('')}</div>`
+            : '';
+
+        let deleteBtnDetail = canDelete 
+            ? `<button class="admin-btn danger" onclick="deleteFile('${file.id}')" style="margin-top:15px; width:100%;"><i class="fa-solid fa-trash"></i> Xóa bài viết này</button>` 
             : '';
 
         detailContainer.innerHTML = `
@@ -175,7 +219,8 @@ window.viewFileDetail = function(fileId) {
                 <p style="margin-bottom: 15px; color:var(--text-muted);"><i class="fa-solid fa-file-zipper"></i> Tệp: <strong>${file.fileName}</strong> (${file.fileSize})</p>
                 <a href="#" class="download-btn" onclick="triggerDownload(event, '${file.id}')"><i class="fa-solid fa-download"></i> Tải file về máy</a>
             </div>
-            <div class="detail-footer-info">
+            ${deleteBtnDetail}
+            <div class="detail-footer-info" style="margin-top: 15px;">
                 <span>Tác giả: <strong>${file.author}</strong> ${isAdmin ? '<span class="admin-badge">[ADMIN]</span>' : ''}</span>
                 <span>Lượt tải: <strong id="dlCount">${file.downloads || 0}</strong> | Lượt xem: <strong>${file.views}</strong></span>
             </div>
@@ -185,7 +230,7 @@ window.viewFileDetail = function(fileId) {
     }
 }
 
-// Kích hoạt tải tệp xuống thực tế
+// Tải đúng file gốc về máy
 window.triggerDownload = function(event, fileId) {
     event.preventDefault();
     let files = JSON.parse(localStorage.getItem('sharehub_files') || '[]');
@@ -198,18 +243,17 @@ window.triggerDownload = function(event, fileId) {
         const dlEl = document.getElementById('dlCount');
         if (dlEl) dlEl.innerText = file.downloads;
 
-        // Tạo tệp tải về máy thực tế
-        const fileContent = `=== SHAREHUB DOWNLOAD ===\nTiêu đề: ${file.title}\nTác giả: ${file.author}\nMô tả: ${file.subContent}\nTên tệp gốc: ${file.fileName}\nKích thước: ${file.fileSize}`;
-        const blob = new Blob([fileContent], { type: 'text/plain;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = file.fileName || 'downloaded_file.txt';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        if (file.fileDataUrl) {
+            const a = document.createElement('a');
+            a.href = file.fileDataUrl;
+            a.download = file.fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        } else {
+            showToast('Không tìm thấy dữ liệu tệp gốc!');
+            return;
+        }
 
         showToast(`Đang tải xuống: ${file.fileName}`);
     }
