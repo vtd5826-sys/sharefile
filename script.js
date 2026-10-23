@@ -69,17 +69,17 @@ window.checkFileSize = function(input) {
     }
 }
 
-// BẤM TẠO -> TỰ ĐỘNG MỞ LUÔN MỘT TRANG WEB MỚI DỰA TRÊN WEB CHÍNH
+// BẤM TẠO -> LƯU VÀ MỞ THẲNG TRANG CHI TIẾT TRÊN WEB CHÍNH
 window.handleUpload = function(event) {
     event.preventDefault();
     if (!currentUser) {
-        showToast('Vui lòng đăng nhập để tạo web!');
+        showToast('Vui lòng đăng nhập để tạo trang!');
         openAuthModal();
         return;
     }
 
     if (isUserBanned(currentUser)) {
-        showToast('Tài khoản của bạn đang bị cấm, không thể tạo web!');
+        showToast('Tài khoản của bạn đang bị cấm, không thể tạo trang!');
         return;
     }
 
@@ -94,15 +94,13 @@ window.handleUpload = function(event) {
         return;
     }
 
-    showToast('Đang khởi tạo trang web mới...');
+    showToast('Đang tạo trang web mới...');
 
     const reader = new FileReader();
     reader.onload = function(e) {
         const fileDataUrl = e.target.result;
         const fileSize = (file.size / (1024 * 1024)).toFixed(2) + ' MB';
-        const isAdmin = (authorName.toUpperCase() === 'TDZADMIN');
 
-        // 1. Lưu vào danh sách hệ thống trang chủ
         const newFile = {
             id: 'file_' + Date.now(),
             title: mainTitle,
@@ -117,102 +115,18 @@ window.handleUpload = function(event) {
             createdAt: Date.now()
         };
 
-        try {
-            let files = JSON.parse(localStorage.getItem('sharehub_files') || '[]');
-            files.unshift(newFile);
-            localStorage.setItem('sharehub_files', JSON.stringify(files));
-            loadFiles();
-        } catch (err) {
-            console.log('Cảnh báo bộ nhớ khi lưu trữ');
-        }
+        let files = JSON.parse(localStorage.getItem('sharehub_files') || '[]');
+        files.unshift(newFile);
+        localStorage.setItem('sharehub_files', JSON.stringify(files));
 
-        // 2. Mở trực tiếp một CỬA SỔ WEB MỚI trên trình duyệt
-        const newWindow = window.open('', '_blank');
-        if (newWindow) {
-            const galleryHtml = selectedImagesBase64.length > 0 
-                ? `<div class="gallery">${selectedImagesBase64.map(img => `<img src="${img}">`).join('')}</div>` 
-                : '';
-
-            newWindow.document.write(`
-                <!DOCTYPE html>
-                <html lang="vi">
-                <head>
-                    <meta charset="UTF-8">
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <title>${mainTitle} - ShareHub</title>
-                    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-                    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-                    <style>
-                        :root {
-                            --bg-main: #0a0b10;
-                            --bg-card: #121520;
-                            --bg-input: #1a1e2e;
-                            --primary: #00f2fe;
-                            --secondary: #7f00ff;
-                            --text-main: #ffffff;
-                            --text-muted: #94a3b8;
-                            --border: #222b45;
-                            --admin-red: #ff3366;
-                        }
-                        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', sans-serif; }
-                        body { background-color: var(--bg-main); color: var(--text-main); min-height: 100vh; padding: 40px 20px; display: flex; flex-direction: column; align-items: center; }
-                        .header-nav { width: 100%; max-width: 800px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
-                        .brand { font-size: 1.4rem; font-weight: 800; color: #fff; text-decoration: none; display: flex; align-items: center; gap: 8px; }
-                        .brand span { color: var(--primary); }
-                        .page-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 20px; padding: 35px; width: 100%; max-width: 800px; box-shadow: 0 10px 30px rgba(0, 242, 254, 0.15); }
-                        .page-title { font-size: 2.2rem; font-weight: 800; margin-bottom: 15px; color: #fff; }
-                        .page-desc { font-size: 1.05rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 30px; background: var(--bg-input); padding: 20px; border-radius: 12px; border-left: 4px solid var(--primary); }
-                        .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px; }
-                        .gallery img { width: 100%; height: 180px; object-fit: cover; border-radius: 12px; border: 1px solid var(--border); }
-                        .download-box { text-align: center; background: linear-gradient(135deg, rgba(0,242,254,0.1), rgba(127,0,255,0.1)); border: 1px solid var(--primary); padding: 30px; border-radius: 16px; margin-bottom: 25px; }
-                        .download-btn { display: inline-flex; align-items: center; gap: 10px; background: linear-gradient(135deg, var(--primary), var(--secondary)); color: #000; font-weight: 800; padding: 16px 36px; border-radius: 50px; text-decoration: none; font-size: 1.2rem; cursor: pointer; border: none; transition: 0.3s; }
-                        .download-btn:hover { transform: scale(1.03); box-shadow: 0 0 20px rgba(0, 242, 254, 0.4); }
-                        .footer-info { display: flex; justify-content: space-between; color: var(--text-muted); font-size: 0.9rem; border-top: 1px solid var(--border); padding-top: 15px; }
-                        .admin-badge { background: var(--admin-red); color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 800; margin-left: 5px; }
-                    </style>
-                </head>
-                <body>
-                    <div class="header-nav">
-                        <div class="brand"><i class="fa-solid fa-cube" style="color:var(--primary);"></i> Share<span>Hub</span></div>
-                        <span style="color:var(--text-muted); font-size:0.9rem;">Trang chia sẻ độc lập</span>
-                    </div>
-                    <div class="page-card">
-                        <h1 class="page-title">${mainTitle}</h1>
-                        <div class="page-desc">${subContent || 'Không có mô tả chi tiết.'}</div>
-                        ${galleryHtml}
-                        <div class="download-box">
-                            <p style="margin-bottom: 15px; color:var(--text-muted);"><i class="fa-solid fa-file-zipper"></i> Tệp đính kèm: <strong>${file.name}</strong> (${fileSize})</p>
-                            <button class="download-btn" id="dlBtn"><i class="fa-solid fa-download"></i> Tải file về máy</button>
-                        </div>
-                        <div class="footer-info">
-                            <span>Tác giả: <strong>${authorName}</strong> ${isAdmin ? '<span class="admin-badge">[ADMIN]</span>' : ''}</span>
-                            <span>Trạng thái: <strong style="color:var(--primary);">Đã sẵn sàng</strong></span>
-                        </div>
-                    </div>
-                    <script>
-                        document.getElementById('dlBtn').onclick = function() {
-                            const a = document.createElement('a');
-                            a.href = "${fileDataUrl}";
-                            a.download = "${file.name}";
-                            document.body.appendChild(a);
-                            a.click();
-                            document.body.removeChild(a);
-                        };
-                    <\/script>
-                </body>
-                </html>
-            `);
-            newWindow.document.close();
-            showToast('Đã mở trang web mới thành công!');
-        } else {
-            showToast('Vui lòng cho phép trình duyệt mở Pop-up tab mới!');
-        }
-
-        // Reset form đăng bài
+        showToast('Tạo trang thành công!');
         document.getElementById('uploadForm').reset();
         document.getElementById('previewContainer').innerHTML = '';
         selectedImagesBase64 = [];
-        switchTab('feed');
+        loadFiles();
+
+        // Mở thẳng trang chi tiết của file vừa tạo trên giao diện web chính
+        viewFileDetail(newFile.id);
     };
 
     reader.readAsDataURL(file);
