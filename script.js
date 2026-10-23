@@ -78,7 +78,6 @@ window.handleUpload = function(event) {
         return;
     }
 
-    // Kiểm tra xem user có đang bị ban không
     if (isUserBanned(currentUser)) {
         showToast('Tài khoản của bạn đang bị cấm, không thể đăng bài!');
         return;
@@ -363,7 +362,7 @@ window.submitReport = function(event) {
     closeReportModal();
 }
 
-// HỆ THỐNG BAN VÀ QUẢN LÝ TÀI KHOẢN (ADMIN ONLY)
+// HỆ THỐNG BAN & BỎ CẤM TÀI KHOẢN (ADMIN ONLY)
 window.openBanModal = function(username) {
     currentBanUsername = username;
     document.getElementById('banTargetUser').innerText = username;
@@ -428,18 +427,32 @@ window.confirmBan = function(event) {
     loadAdminData();
 }
 
+// BỎ CẤM (UNBAN) TÀI KHOẢN
 window.unbanUser = function(username) {
+    if (!currentUser || currentUser.toUpperCase() !== 'TDZADMIN') {
+        showToast('Chỉ Admin mới có quyền mở khóa!');
+        return;
+    }
+
     let users = JSON.parse(localStorage.getItem('sharehub_users') || '[]');
+    let found = false;
+
     users = users.map(u => {
         if (u.username.toLowerCase() === username.toLowerCase()) {
             u.bannedUntil = 0;
             u.banReason = '';
+            found = true;
         }
         return u;
     });
-    localStorage.setItem('sharehub_users', JSON.stringify(users));
-    showToast(`Đã mở khóa cho tài khoản ${username}!`);
-    loadAdminData();
+
+    if (found) {
+        localStorage.setItem('sharehub_users', JSON.stringify(users));
+        showToast(`Đã BỎ CẤM thành công cho tài khoản ${username}!`);
+        loadAdminData();
+    } else {
+        showToast('Không tìm thấy tài khoản!');
+    }
 }
 
 window.deleteAccount = function(username) {
@@ -468,7 +481,7 @@ function isUserBanned(username) {
 function loadAdminData() {
     if (!currentUser || currentUser.toUpperCase() !== 'TDZADMIN') return;
 
-    // Load Reports Inbox
+    // Load Hòm thư báo cáo
     const reportContainer = document.getElementById('adminReportList');
     const reports = JSON.parse(localStorage.getItem('sharehub_reports') || '[]');
     const files = JSON.parse(localStorage.getItem('sharehub_files') || '[]');
@@ -495,22 +508,23 @@ function loadAdminData() {
         }).join('');
     }
 
-    // Load Accounts Table
+    // Load Danh sách tài khoản kèm nút Cấm / Bỏ Cấm
     const tableBody = document.getElementById('accountsTableBody');
     const users = JSON.parse(localStorage.getItem('sharehub_users') || '[]');
     
     tableBody.innerHTML = users.map(u => {
         let isBanned = u.bannedUntil && u.bannedUntil > Date.now();
+        
         let banStatusText = isBanned 
-            ? `<span style="color:var(--admin-red); font-weight:700;">Đang cấm (Đến ${new Date(u.bannedUntil).toLocaleString()})</span><br><small>Lý do: ${u.banReason}</small>` 
-            : `<span style="color:#10b981; font-weight:600;">Hoạt động bình thường</span>`;
+            ? `<span style="color:var(--admin-red); font-weight:700;"><i class="fa-solid fa-lock"></i> Đang bị cấm (Đến ${new Date(u.bannedUntil).toLocaleString()})</span><br><small style="color:var(--text-muted);">Lý do: ${u.banReason}</small>` 
+            : `<span style="color:#10b981; font-weight:600;"><i class="fa-solid fa-circle-check"></i> Hoạt động bình thường</span>`;
 
         let actionBtns = u.username.toUpperCase() === 'TDZADMIN' 
             ? `<span style="color:var(--text-muted);">Admin Tối Cao</span>`
             : (isBanned 
-                ? `<button class="admin-btn" style="padding:6px 12px; font-size:0.85rem;" onclick="unbanUser('${u.username}')">Mở khóa</button>` 
-                : `<button class="admin-btn danger" style="padding:6px 12px; font-size:0.85rem;" onclick="openBanModal('${u.username}')">Cấm</button>`) +
-              `<button class="admin-btn danger" style="padding:6px 12px; font-size:0.85rem; background:#334155; margin-left:6px;" onclick="deleteAccount('${u.username}')">Xóa</button>`;
+                ? `<button class="admin-btn" style="padding:6px 12px; font-size:0.85rem; background:#10b981; color:#000;" onclick="unbanUser('${u.username}')"><i class="fa-solid fa-lock-open"></i> Bỏ cấm</button>` 
+                : `<button class="admin-btn danger" style="padding:6px 12px; font-size:0.85rem;" onclick="openBanModal('${u.username}')"><i class="fa-solid fa-ban"></i> Cấm</button>`) +
+              `<button class="admin-btn danger" style="padding:6px 12px; font-size:0.85rem; background:#334155; margin-left:6px;" onclick="deleteAccount('${u.username}')"><i class="fa-solid fa-trash"></i> Xóa</button>`;
 
         return `
             <tr>
