@@ -1,12 +1,18 @@
-// ==================== CẤU HÌNH FIREBASE ====================
-const firebaseConfig = {
-    databaseURL: "https://sharehub-feee9-default-rtdb.firebaseio.com/"
-};
+// ==================== CẤU HÌNH CLOUD DATABASE (REST API) ====================
+const DB_BASE_URL = "https://sharehub-feee9-default-rtdb.firebaseio.com";
 
-// Khởi tạo Firebase
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
-// ==========================================================
+// Hàm tương tác với Firebase Realtime Database qua REST API
+async function dbFetch(path, options = {}) {
+    try {
+        const response = await fetch(`${DB_BASE_URL}/${path}.json`, options);
+        if (!response.ok) throw new Error('Database Error');
+        return await response.json();
+    } catch (err) {
+        console.error("Lỗi kết nối Cloud Database:", err);
+        return null;
+    }
+}
+// ===========================================================================
 
 let currentUser = null;
 let allFiles = [];
@@ -14,26 +20,35 @@ let selectedImagesBase64 = [];
 let currentBanUsername = null;
 let currentReportFileId = null;
 
-// Khởi tạo hệ thống chạy ngay lập tức
+// Khởi tạo ứng dụng
 (function initApp() {
     checkStoredSession();
     
-    // Đảm bảo tài khoản admin TDZADMIN luôn tồn tại trên Database
-    db.ref('users/TDZADMIN').once('value', (snapshot) => {
-        if (!snapshot.exists()) {
-            db.ref('users/TDZADMIN').set({
-                username: 'TDZADMIN',
-                password: 'TDZ2013@',
-                bannedUntil: 0,
-                banReason: ''
+    // Đảm bảo account Admin TDZADMIN mặc định trên Cloud
+    dbFetch('users/TDZADMIN').then(user => {
+        if (!user) {
+            dbFetch('users/TDZADMIN', {
+                method: 'PUT',
+                body: JSON.stringify({
+                    username: 'TDZADMIN',
+                    password: 'TDZ2013@',
+                    bannedUntil: 0,
+                    banReason: ''
+                })
             });
         }
     });
 
-    // Lắng nghe dữ liệu Real-time từ Cloud
-    listenSharedFiles();
-    listenChatMessages();
+    // Tải dữ liệu ban đầu và bật vòng lặp đồng bộ Realtime
+    loadFiles();
+    loadChatMessages();
     checkActiveAnnouncement();
+
+    setInterval(() => {
+        loadFiles();
+        loadChatMessages();
+        checkActiveAnnouncement();
+    }, 3000);
 })();
 
 function showToast(message) {
@@ -59,6 +74,7 @@ window.switchTab = function(tabName) {
 window.handleImagePreviews = function(event) {
     const files = event.target.files;
     const container = document.getElementById('previewContainer');
+    if (!container) return;
     container.innerHTML = '';
     selectedImagesBase64 = [];
 
@@ -82,6 +98,19 @@ window.handleImagePreviews = function(event) {
     }
 }
 
+window.removePreview = function(index) {
+    selectedImagesBase64.splice(index, 1);
+    const container = document.getElementById('previewContainer');
+    if (container) {
+        container.innerHTML = selectedImagesBase64.map((img, i) => `
+            <div class="preview-thumb">
+                <img src="${img}">
+                <button type="button" class="remove-thumb" onclick="removePreview(${i})">&times;</button>
+            </div>
+        `).join('');
+    }
+}
+
 window.checkFileSize = function(input) {
     if (input.files[0] && input.files[0].size > 1024 * 1024 * 1024) {
         showToast('File vượt quá giới hạn 1GB!');
@@ -90,7 +119,7 @@ window.checkFileSize = function(input) {
 }
 
 // ĐĂNG BÀI LÊN CLOUD DATABASE
-window.handleUpload = function(event) {
+window.handleUpload = async function(event) {
     event.preventDefault();
     if (!currentUser) {
         showToast('Vui lòng đăng nhập để tạo trang!');
@@ -98,70 +127,69 @@ window.handleUpload = function(event) {
         return;
     }
 
-    db.ref('users/' + currentUser).once('value', (snapshot) => {
-        const uData = snapshot.val();
-        if (uData && uData.bannedUntil && uData.bannedUntil > Date.now()) {
-            showToast('Tài khoản của bạn đang bị cấm, không thể tạo trang!');
-            return;
-        }
+    const uData = await dbFetch('users/' + currentUser);
+    if (uData && uData.bannedUntil && uData.bannedUntil > Date.now()) {
+        showToast('Tài khoản của bạn đang bị cấm, không thể tạo trang!');
+        return;
+    }
 
-        const fileInput = document.getElementById('fileInput');
-        const mainTitle = document.getElementById('mainTitle').value;
-        const subContent = document.getElementById('subContent').value;
-        const authorName = document.getElementById('authorName').value;
+    const fileInput = document.getElementById('fileInput');
+    const mainTitle = document.getElementById('mainTitle').value;
+    const subContent = document.getElementById('subContent').value;
+    const authorName = document.getElementById('authorName').value;
 
-        const file = fileInput.files[0];
-        if (!file) {
-            showToast('Vui lòng chọn file cần chia sẻ!');
-            return;
-        }
+    const file = fileInput.files[0];
+    if (!file) {
+        showToast('Vui lòng chọn file cần chia sẻ!');
+        return;
+    }
 
-        showToast('Đang tải lên hệ thống đám mây...');
+    showToast('Đang tải lên hệ thống đám mây...');
 
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const fileDataUrl = e.target.result;
-            const fileSize = (file.size / (1024 * 1024)).toFixed(2) + ' MB';
+    const reader = new FileReader();
+    reader.onload = async function(e) {
+        const fileDataUrl = e.target.result;
+        const fileSize = (file.size / (1024 * 1024)).toFixed(2) + ' MB';
 
-            const newFileId = 'file_' + Date.now();
-            const newFile = {
-                id: newFileId,
-                title: mainTitle,
-                subContent: subContent,
-                author: authorName,
-                fileName: file.name,
-                fileSize: fileSize,
-                fileDataUrl: fileDataUrl,
-                images: [...selectedImagesBase64],
-                downloads: 0,
-                views: 0,
-                createdAt: Date.now()
-            };
-
-            // Đẩy lên Firebase Cloud Database
-            db.ref('files/' + newFileId).set(newFile, (error) => {
-                if (!error) {
-                    showToast('Tạo trang và đồng bộ thành công!');
-                    document.getElementById('uploadForm').reset();
-                    document.getElementById('previewContainer').innerHTML = '';
-                    selectedImagesBase64 = [];
-                    viewFileDetail(newFileId);
-                } else {
-                    showToast('Lỗi khi tải lên Cloud!');
-                }
-            });
+        const newFileId = 'file_' + Date.now();
+        const newFile = {
+            id: newFileId,
+            title: mainTitle,
+            subContent: subContent,
+            author: authorName,
+            fileName: file.name,
+            fileSize: fileSize,
+            fileDataUrl: fileDataUrl,
+            images: [...selectedImagesBase64],
+            downloads: 0,
+            views: 0,
+            createdAt: Date.now()
         };
-        reader.readAsDataURL(file);
-    });
+
+        const res = await dbFetch('files/' + newFileId, {
+            method: 'PUT',
+            body: JSON.stringify(newFile)
+        });
+
+        if (res) {
+            showToast('Tạo trang và đồng bộ thành công!');
+            document.getElementById('uploadForm').reset();
+            document.getElementById('previewContainer').innerHTML = '';
+            selectedImagesBase64 = [];
+            loadFiles();
+            viewFileDetail(newFileId);
+        } else {
+            showToast('Lỗi khi tải lên Cloud!');
+        }
+    };
+    reader.readAsDataURL(file);
 };
 
-// Lắng nghe file đồng bộ Real-time từ Firebase
-function listenSharedFiles() {
-    db.ref('files').on('value', (snapshot) => {
-        const data = snapshot.val();
-        allFiles = data ? Object.values(data).sort((a,b) => b.createdAt - a.createdAt) : [];
-        renderFiles(allFiles);
-    });
+// Tải danh sách bài viết từ Cloud
+async function loadFiles() {
+    const data = await dbFetch('files');
+    allFiles = data ? Object.values(data).sort((a,b) => b.createdAt - a.createdAt) : [];
+    renderFiles(allFiles);
 }
 
 function renderFiles(files) {
@@ -173,7 +201,7 @@ function renderFiles(files) {
     }
 
     grid.innerHTML = files.map(file => {
-        let isAdmin = (file.author.toUpperCase() === 'TDZADMIN');
+        let isAdmin = (file.author && file.author.toUpperCase() === 'TDZADMIN');
         let canDelete = currentUser && (currentUser === file.author || currentUser.toUpperCase() === 'TDZADMIN');
         
         let thumbHtml = file.images && file.images.length > 0 
@@ -216,93 +244,91 @@ function renderFiles(files) {
 
 window.filterFiles = function() {
     const keyword = document.getElementById('searchInput').value.toLowerCase();
-    const filtered = allFiles.filter(f => f.title.toLowerCase().includes(keyword) || f.author.toLowerCase().includes(keyword));
+    const filtered = allFiles.filter(f => f.title.toLowerCase().includes(keyword) || (f.author && f.author.toLowerCase().includes(keyword)));
     renderFiles(filtered);
 }
 
 // Xóa file/bài viết trên Cloud
-window.deleteFile = function(fileId) {
+window.deleteFile = async function(fileId) {
     if (!confirm('Bạn có chắc chắn muốn xóa bài viết này không?')) return;
 
-    db.ref('files/' + fileId).remove((error) => {
-        if (!error) {
-            showToast('Đã xóa bài viết khỏi server!');
-            switchTab('feed');
-        } else {
-            showToast('Lỗi khi xóa bài viết!');
-        }
-    });
+    await dbFetch('files/' + fileId, { method: 'DELETE' });
+    showToast('Đã xóa bài viết khỏi server!');
+    switchTab('feed');
+    loadFiles();
 }
 
 // Xem chi tiết file
-window.viewFileDetail = function(fileId) {
+window.viewFileDetail = async function(fileId) {
     switchTab('detail');
     const detailContainer = document.getElementById('detailContent');
     
-    db.ref('files/' + fileId).once('value', (snapshot) => {
-        const file = snapshot.val();
-        if (file) {
-            // Tăng lượt xem
-            db.ref('files/' + fileId + '/views').set((file.views || 0) + 1);
+    const file = await dbFetch('files/' + fileId);
+    if (file) {
+        const newViews = (file.views || 0) + 1;
+        dbFetch('files/' + fileId + '/views', {
+            method: 'PUT',
+            body: JSON.stringify(newViews)
+        });
 
-            let isAdmin = (file.author.toUpperCase() === 'TDZADMIN');
-            let canDelete = currentUser && (currentUser === file.author || currentUser.toUpperCase() === 'TDZADMIN');
+        let isAdmin = (file.author && file.author.toUpperCase() === 'TDZADMIN');
+        let canDelete = currentUser && (currentUser === file.author || currentUser.toUpperCase() === 'TDZADMIN');
 
-            let galleryHtml = file.images && file.images.length > 0
-                ? `<div class="detail-gallery">${file.images.map(img => `<img src="${img}">`).join('')}</div>`
-                : '';
+        let galleryHtml = file.images && file.images.length > 0
+            ? `<div class="detail-gallery">${file.images.map(img => `<img src="${img}">`).join('')}</div>`
+            : '';
 
-            let deleteBtnDetail = canDelete 
-                ? `<button class="admin-btn danger" onclick="deleteFile('${file.id}')" style="margin-top:15px; width:100%;"><i class="fa-solid fa-trash"></i> Xóa bài viết này</button>` 
-                : '';
+        let deleteBtnDetail = canDelete 
+            ? `<button class="admin-btn danger" onclick="deleteFile('${file.id}')" style="margin-top:15px; width:100%;"><i class="fa-solid fa-trash"></i> Xóa bài viết này</button>` 
+            : '';
 
-            detailContainer.innerHTML = `
-                <h1 class="detail-main-title">${file.title}</h1>
-                <div class="detail-sub-content">${file.subContent || 'Không có nội dung phụ mô tả.'}</div>
-                ${galleryHtml}
-                <div class="detail-download-box">
-                    <p style="margin-bottom: 15px; color:var(--text-muted);"><i class="fa-solid fa-file-zipper"></i> Tệp: <strong>${file.fileName}</strong> (${file.fileSize})</p>
-                    <a href="#" class="download-btn" onclick="triggerDownload(event, '${file.id}')"><i class="fa-solid fa-download"></i> Tải file về máy</a>
-                </div>
-                ${deleteBtnDetail}
-                <div class="detail-footer-info" style="margin-top: 15px;">
-                    <span>Tác giả: <strong>${file.author}</strong> ${isAdmin ? '<span class="admin-badge">[ADMIN]</span>' : ''}</span>
-                    <span>Lượt tải: <strong id="dlCount">${file.downloads || 0}</strong> | Lượt xem: <strong>${(file.views || 0) + 1}</strong></span>
-                </div>
-            `;
-        } else {
-            detailContainer.innerHTML = `<p>Không tìm thấy file hoặc đã bị xóa.</p>`;
-        }
-    });
+        detailContainer.innerHTML = `
+            <h1 class="detail-main-title">${file.title}</h1>
+            <div class="detail-sub-content">${file.subContent || 'Không có nội dung phụ mô tả.'}</div>
+            ${galleryHtml}
+            <div class="detail-download-box">
+                <p style="margin-bottom: 15px; color:var(--text-muted);"><i class="fa-solid fa-file-zipper"></i> Tệp: <strong>${file.fileName}</strong> (${file.fileSize})</p>
+                <a href="#" class="download-btn" onclick="triggerDownload(event, '${file.id}')"><i class="fa-solid fa-download"></i> Tải file về máy</a>
+            </div>
+            ${deleteBtnDetail}
+            <div class="detail-footer-info" style="margin-top: 15px;">
+                <span>Tác giả: <strong>${file.author}</strong> ${isAdmin ? '<span class="admin-badge">[ADMIN]</span>' : ''}</span>
+                <span>Lượt tải: <strong id="dlCount">${file.downloads || 0}</strong> | Lượt xem: <strong>${newViews}</strong></span>
+            </div>
+        `;
+    } else {
+        detailContainer.innerHTML = `<p>Không tìm thấy file hoặc đã bị xóa.</p>`;
+    }
 }
 
 // Tải đúng file gốc về máy
-window.triggerDownload = function(event, fileId) {
+window.triggerDownload = async function(event, fileId) {
     event.preventDefault();
-    db.ref('files/' + fileId).once('value', (snapshot) => {
-        const file = snapshot.val();
-        if (file) {
-            const newDlCount = (file.downloads || 0) + 1;
-            db.ref('files/' + fileId + '/downloads').set(newDlCount);
-            
-            const dlEl = document.getElementById('dlCount');
-            if (dlEl) dlEl.innerText = newDlCount;
+    const file = await dbFetch('files/' + fileId);
+    if (file) {
+        const newDlCount = (file.downloads || 0) + 1;
+        dbFetch('files/' + fileId + '/downloads', {
+            method: 'PUT',
+            body: JSON.stringify(newDlCount)
+        });
+        
+        const dlEl = document.getElementById('dlCount');
+        if (dlEl) dlEl.innerText = newDlCount;
 
-            if (file.fileDataUrl) {
-                const a = document.createElement('a');
-                a.href = file.fileDataUrl;
-                a.download = file.fileName;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-            } else {
-                showToast('Không tìm thấy dữ liệu tệp gốc!');
-                return;
-            }
-
-            showToast(`Đang tải xuống: ${file.fileName}`);
+        if (file.fileDataUrl) {
+            const a = document.createElement('a');
+            a.href = file.fileDataUrl;
+            a.download = file.fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        } else {
+            showToast('Không tìm thấy dữ liệu tệp gốc!');
+            return;
         }
-    });
+
+        showToast(`Đang tải xuống: ${file.fileName}`);
+    }
 }
 
 window.copyShareLink = function(fileId) {
@@ -312,37 +338,36 @@ window.copyShareLink = function(fileId) {
 }
 
 // ==================== TRÒ CHUYỆN TRỰC TUYẾN (REAL-TIME CHAT) ====================
-function listenChatMessages() {
-    db.ref('chats').limitToLast(50).on('value', (snapshot) => {
-        const data = snapshot.val();
-        const chatContainer = document.getElementById('chatMessages');
-        if (!chatContainer) return;
-        chatContainer.innerHTML = '';
+async function loadChatMessages() {
+    const data = await dbFetch('chats');
+    const chatContainer = document.getElementById('chatMessages');
+    if (!chatContainer) return;
+    chatContainer.innerHTML = '';
 
-        if (!data) {
-            chatContainer.innerHTML = `<p style="color:var(--text-muted)">Chưa có tin nhắn nào trong phòng chat.</p>`;
-            return;
-        }
+    if (!data) {
+        chatContainer.innerHTML = `<p style="color:var(--text-muted)">Chưa có tin nhắn nào trong phòng chat.</p>`;
+        return;
+    }
 
-        Object.values(data).forEach(msg => {
-            let isAdmin = (msg.author.toUpperCase() === 'TDZADMIN');
-            let isMine = currentUser && currentUser === msg.author;
-            
-            chatContainer.innerHTML += `
-                <div class="chat-msg ${isMine ? 'mine' : ''}">
-                    <div class="chat-msg-header">
-                        <span class="chat-msg-author">${msg.author} ${isAdmin ? '<span class="admin-badge">[ADMIN]</span>' : ''}</span>
-                        <span>${new Date(msg.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                    </div>
-                    <div class="chat-msg-body">${msg.text}</div>
+    const messages = Object.values(data).slice(-50);
+    chatContainer.innerHTML = messages.map(msg => {
+        let isAdmin = (msg.author && msg.author.toUpperCase() === 'TDZADMIN');
+        let isMine = currentUser && currentUser === msg.author;
+        
+        return `
+            <div class="chat-msg ${isMine ? 'mine' : ''}">
+                <div class="chat-msg-header">
+                    <span class="chat-msg-author">${msg.author} ${isAdmin ? '<span class="admin-badge">[ADMIN]</span>' : ''}</span>
+                    <span>${new Date(msg.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                 </div>
-            `;
-        });
-        chatContainer.scrollTop = chatContainer.scrollHeight;
-    });
+                <div class="chat-msg-body">${msg.text}</div>
+            </div>
+        `;
+    }).join('');
+    chatContainer.scrollTop = chatContainer.scrollHeight;
 }
 
-window.sendChatMessage = function(event) {
+window.sendChatMessage = async function(event) {
     event.preventDefault();
     if (!currentUser) {
         showToast('Vui lòng đăng nhập để nhắn tin!');
@@ -350,24 +375,26 @@ window.sendChatMessage = function(event) {
         return;
     }
 
-    db.ref('users/' + currentUser).once('value', (snapshot) => {
-        const uData = snapshot.val();
-        if (uData && uData.bannedUntil && uData.bannedUntil > Date.now()) {
-            showToast('Tài khoản của bạn đang bị cấm, không thể nhắn tin!');
-            return;
-        }
+    const uData = await dbFetch('users/' + currentUser);
+    if (uData && uData.bannedUntil && uData.bannedUntil > Date.now()) {
+        showToast('Tài khoản của bạn đang bị cấm, không thể nhắn tin!');
+        return;
+    }
 
-        const input = document.getElementById('chatInput');
-        const text = input.value.trim();
-        if (!text) return;
+    const input = document.getElementById('chatInput');
+    const text = input.value.trim();
+    if (!text) return;
 
-        db.ref('chats').push({
+    await dbFetch('chats', {
+        method: 'POST',
+        body: JSON.stringify({
             author: currentUser,
             text: text,
             time: Date.now()
-        });
-        input.value = '';
+        })
     });
+    input.value = '';
+    loadChatMessages();
 }
 
 // ==================== HỆ THỐNG BÁO CÁO & ADMIN ====================
@@ -378,23 +405,24 @@ window.openReportModal = function(fileId) {
 window.closeReportModal = function() {
     document.getElementById('reportModal').style.display = 'none';
 }
-window.submitReport = function(event) {
+window.submitReport = async function(event) {
     event.preventDefault();
     const reason = document.getElementById('reportReason').value;
 
     const repId = 'rep_' + Date.now();
-    db.ref('reports/' + repId).set({
-        id: repId,
-        fileId: currentReportFileId,
-        reporter: currentUser,
-        reason: reason,
-        time: Date.now()
-    }, (error) => {
-        if (!error) {
-            showToast('Đã gửi báo cáo thành công cho Admin!');
-            closeReportModal();
-        }
+    await dbFetch('reports/' + repId, {
+        method: 'PUT',
+        body: JSON.stringify({
+            id: repId,
+            fileId: currentReportFileId,
+            reporter: currentUser,
+            reason: reason,
+            time: Date.now()
+        })
     });
+
+    showToast('Đã gửi báo cáo thành công cho Admin!');
+    closeReportModal();
 }
 
 // Admin Ban & Quản lý
@@ -420,7 +448,7 @@ window.selectBanPreset = function(select) {
     }
 }
 
-window.confirmBan = function(event) {
+window.confirmBan = async function(event) {
     event.preventDefault();
     if (!currentUser || currentUser.toUpperCase() !== 'TDZADMIN') return;
 
@@ -447,82 +475,72 @@ window.confirmBan = function(event) {
 
     let bannedUntil = Date.now() + banDurationMs;
 
-    db.ref('users/' + currentBanUsername).update({
-        bannedUntil: bannedUntil,
-        banReason: reason
-    }, () => {
-        showToast(`Đã cấm tài khoản ${currentBanUsername} thành công!`);
-        closeBanModal();
-        loadAdminData();
-    });
+    await dbFetch('users/' + currentBanUsername + '/bannedUntil', { method: 'PUT', body: JSON.stringify(bannedUntil) });
+    await dbFetch('users/' + currentBanUsername + '/banReason', { method: 'PUT', body: JSON.stringify(reason) });
+
+    showToast(`Đã cấm tài khoản ${currentBanUsername} thành công!`);
+    closeBanModal();
+    loadAdminData();
 }
 
-window.unbanUser = function(username) {
+window.unbanUser = async function(username) {
     if (!currentUser || currentUser.toUpperCase() !== 'TDZADMIN') return;
 
-    db.ref('users/' + username).update({
-        bannedUntil: 0,
-        banReason: ''
-    }, () => {
-        showToast(`Đã BỎ CẤM thành công cho tài khoản ${username}!`);
-        loadAdminData();
-    });
+    await dbFetch('users/' + username + '/bannedUntil', { method: 'PUT', body: JSON.stringify(0) });
+    await dbFetch('users/' + username + '/banReason', { method: 'PUT', body: JSON.stringify('') });
+
+    showToast(`Đã BỎ CẤM thành công cho tài khoản ${username}!`);
+    loadAdminData();
 }
 
-window.deleteAccount = function(username) {
+window.deleteAccount = async function(username) {
     if (username.toUpperCase() === 'TDZADMIN') {
         showToast('Không thể xóa tài khoản Admin tối cao!');
         return;
     }
     if (!confirm(`Bạn có chắc muốn xóa vĩnh viễn tài khoản ${username}?`)) return;
 
-    db.ref('users/' + username).remove(() => {
-        showToast(`Đã xóa tài khoản ${username}!`);
-        loadAdminData();
-    });
+    await dbFetch('users/' + username, { method: 'DELETE' });
+    showToast(`Đã xóa tài khoản ${username}!`);
+    loadAdminData();
 }
 
-function loadAdminData() {
+async function loadAdminData() {
     if (!currentUser || currentUser.toUpperCase() !== 'TDZADMIN') return;
 
     // Load Reports
-    db.ref('reports').once('value', (snapshot) => {
-        const reportsData = snapshot.val();
-        const reportContainer = document.getElementById('adminReportList');
-        if (!reportContainer) return;
-
+    const reportsData = await dbFetch('reports');
+    const reportContainer = document.getElementById('adminReportList');
+    
+    if (reportContainer) {
         if (!reportsData) {
             reportContainer.innerHTML = `<p style="color:var(--text-muted); font-size:0.9rem;">Hòm thư trống, không có báo cáo nào.</p>`;
         } else {
-            db.ref('files').once('value', (fileSnap) => {
-                const filesData = fileSnap.val() || {};
-                reportContainer.innerHTML = Object.values(reportsData).map(rep => {
-                    const file = filesData[rep.fileId];
-                    const fileTitle = file ? file.title : 'Bài viết đã bị xóa';
-                    return `
-                        <div class="report-item">
-                            <div>
-                                <strong style="color:var(--admin-red);">[${rep.reason}]</strong> 
-                                <span>Người báo cáo: <strong>${rep.reporter}</strong></span>
-                                <div style="font-size: 0.85rem; color:var(--text-muted); margin-top:4px;">Bài viết: <em>${fileTitle}</em> (${new Date(rep.time).toLocaleString()})</div>
-                            </div>
-                            <div style="display:flex; gap:8px;">
-                                ${file ? `<button class="action-icon-btn" onclick="viewFileDetail('${rep.fileId}')" title="Xem bài"><i class="fa-solid fa-eye"></i></button>` : ''}
-                                <button class="action-icon-btn" style="border-color:#ff3366; color:#ff3366;" onclick="deleteReport('${rep.id}')" title="Xóa báo cáo"><i class="fa-solid fa-check"></i></button>
-                            </div>
+            const filesData = await dbFetch('files') || {};
+            reportContainer.innerHTML = Object.values(reportsData).map(rep => {
+                const file = filesData[rep.fileId];
+                const fileTitle = file ? file.title : 'Bài viết đã bị xóa';
+                return `
+                    <div class="report-item">
+                        <div>
+                            <strong style="color:var(--admin-red);">[${rep.reason}]</strong> 
+                            <span>Người báo cáo: <strong>${rep.reporter}</strong></span>
+                            <div style="font-size: 0.85rem; color:var(--text-muted); margin-top:4px;">Bài viết: <em>${fileTitle}</em> (${new Date(rep.time).toLocaleString()})</div>
                         </div>
-                    `;
-                }).join('');
-            });
+                        <div style="display:flex; gap:8px;">
+                            ${file ? `<button class="action-icon-btn" onclick="viewFileDetail('${rep.fileId}')" title="Xem bài"><i class="fa-solid fa-eye"></i></button>` : ''}
+                            <button class="action-icon-btn" style="border-color:#ff3366; color:#ff3366;" onclick="deleteReport('${rep.id}')" title="Xóa báo cáo"><i class="fa-solid fa-check"></i></button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
         }
-    });
+    }
 
     // Load Accounts
-    db.ref('users').once('value', (snapshot) => {
-        const usersData = snapshot.val();
-        const tableBody = document.getElementById('accountsTableBody');
-        if (!tableBody || !usersData) return;
-
+    const usersData = await dbFetch('users');
+    const tableBody = document.getElementById('accountsTableBody');
+    if (tableBody && usersData) {
         tableBody.innerHTML = Object.values(usersData).map(u => {
             let isBanned = u.bannedUntil && u.bannedUntil > Date.now();
             
@@ -545,14 +563,13 @@ function loadAdminData() {
                 </tr>
             `;
         }).join('');
-    });
+    }
 }
 
-window.deleteReport = function(repId) {
-    db.ref('reports/' + repId).remove(() => {
-        loadAdminData();
-        showToast('Đã xóa báo cáo khỏi hòm thư.');
-    });
+window.deleteReport = async function(repId) {
+    await dbFetch('reports/' + repId, { method: 'DELETE' });
+    loadAdminData();
+    showToast('Đã xóa báo cáo khỏi hòm thư.');
 }
 
 // ==================== XÁC THỰC TÀI KHOẢN (CLOUD) ====================
@@ -565,53 +582,51 @@ window.switchAuthMode = function(mode) {
     document.getElementById('registerForm').classList.toggle('active', mode === 'register');
 }
 
-window.handleRegister = function(event) {
+window.handleRegister = async function(event) {
     event.preventDefault();
     const username = document.getElementById('regUsername').value.trim();
     const password = document.getElementById('regPassword').value;
 
-    db.ref('users/' + username).once('value', (snapshot) => {
-        if (snapshot.exists()) {
-            showToast('Tên tài khoản đã tồn tại trên hệ thống!');
-            return;
-        }
+    const existing = await dbFetch('users/' + username);
+    if (existing) {
+        showToast('Tên tài khoản đã tồn tại trên hệ thống!');
+        return;
+    }
 
-        db.ref('users/' + username).set({
+    await dbFetch('users/' + username, {
+        method: 'PUT',
+        body: JSON.stringify({
             username: username,
             password: password,
             bannedUntil: 0,
             banReason: ''
-        }, (error) => {
-            if (!error) {
-                showToast('Đăng ký thành công! Hãy đăng nhập.');
-                switchAuthMode('login');
-            }
-        });
+        })
     });
+
+    showToast('Đăng ký thành công! Hãy đăng nhập.');
+    switchAuthMode('login');
 }
 
-window.handleLogin = function(event) {
+window.handleLogin = async function(event) {
     event.preventDefault();
     const usernameInput = document.getElementById('loginEmail').value.trim();
     const password = document.getElementById('loginPassword').value;
 
-    db.ref('users/' + usernameInput).once('value', (snapshot) => {
-        const user = snapshot.val();
-        if (user && user.password === password) {
-            if (user.bannedUntil && user.bannedUntil > Date.now()) {
-                showToast(`Tài khoản bị cấm đến ${new Date(user.bannedUntil).toLocaleString()}. Lý do: ${user.banReason}`);
-                return;
-            }
-
-            currentUser = user.username;
-            localStorage.setItem('sharehub_session', currentUser);
-            updateAuthUI();
-            closeAuthModal();
-            showToast(`Đăng nhập thành công với tên ${currentUser}!`);
-        } else {
-            showToast('Sai tài khoản hoặc mật khẩu!');
+    const user = await dbFetch('users/' + usernameInput);
+    if (user && user.password === password) {
+        if (user.bannedUntil && user.bannedUntil > Date.now()) {
+            showToast(`Tài khoản bị cấm đến ${new Date(user.bannedUntil).toLocaleString()}. Lý do: ${user.banReason}`);
+            return;
         }
-    });
+
+        currentUser = user.username;
+        localStorage.setItem('sharehub_session', currentUser);
+        updateAuthUI();
+        closeAuthModal();
+        showToast(`Đăng nhập thành công với tên ${currentUser}!`);
+    } else {
+        showToast('Sai tài khoản hoặc mật khẩu!');
+    }
 }
 
 window.handleLogout = function() {
@@ -622,18 +637,16 @@ window.handleLogout = function() {
     switchTab('feed');
 }
 
-function checkStoredSession() {
+async function checkStoredSession() {
     const session = localStorage.getItem('sharehub_session');
     if (session) {
-        db.ref('users/' + session).once('value', (snapshot) => {
-            const user = snapshot.val();
-            if (user && user.bannedUntil && user.bannedUntil > Date.now()) {
-                localStorage.removeItem('sharehub_session');
-                return;
-            }
-            currentUser = session;
-            updateAuthUI();
-        });
+        const user = await dbFetch('users/' + session);
+        if (user && user.bannedUntil && user.bannedUntil > Date.now()) {
+            localStorage.removeItem('sharehub_session');
+            return;
+        }
+        currentUser = session;
+        updateAuthUI();
     }
 }
 
@@ -674,7 +687,7 @@ function updateAuthUI() {
 }
 
 // Thông báo Server của Admin
-window.publishAnnouncement = function() {
+window.publishAnnouncement = async function() {
     if (!currentUser || currentUser.toUpperCase() !== 'TDZADMIN') {
         showToast('Chỉ tài khoản Admin mới có quyền này!');
         return;
@@ -682,28 +695,33 @@ window.publishAnnouncement = function() {
     const text = document.getElementById('adminAnnouncementInput').value.trim();
     if (!text) return;
 
-    db.ref('announcement').set({ text, active: true }, () => {
-        showToast('Đã phát thông báo toàn server!');
+    await dbFetch('announcement', {
+        method: 'PUT',
+        body: JSON.stringify({ text, active: true })
     });
+    showToast('Đã phát thông báo toàn server!');
+    checkActiveAnnouncement();
 }
 
-window.clearAnnouncement = function() {
-    db.ref('announcement').remove(() => {
-        document.getElementById('announcement-banner').style.display = 'none';
-        showToast('Đã xóa thông báo.');
-    });
+window.clearAnnouncement = async function() {
+    await dbFetch('announcement', { method: 'DELETE' });
+    document.getElementById('announcement-banner').style.display = 'none';
+    showToast('Đã xóa thông báo.');
 }
 
-function checkActiveAnnouncement() {
-    db.ref('announcement').on('value', (snapshot) => {
-        const ann = snapshot.val();
+async function checkActiveAnnouncement() {
+    const ann = await dbFetch('announcement');
+    const banner = document.getElementById('announcement-banner');
+    const bannerText = document.getElementById('banner-text');
+
+    if (banner && bannerText) {
         if (ann && ann.active && ann.text) {
-            document.getElementById('banner-text').innerText = ann.text;
-            document.getElementById('announcement-banner').style.display = 'flex';
+            bannerText.innerText = ann.text;
+            banner.style.display = 'flex';
         } else {
-            document.getElementById('announcement-banner').style.display = 'none';
+            banner.style.display = 'none';
         }
-    });
+    }
 }
 
 window.dismissBanner = function() {
